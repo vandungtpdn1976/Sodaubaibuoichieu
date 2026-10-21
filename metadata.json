@@ -1,0 +1,6 @@
+{
+  "name": "Sổ Đầu Bài Buổi Chiều – Ôn Thi HSG",
+  "description": "Ứng dụng Sổ đầu bài buổi chiều ôn thi học sinh giỏi, đồng bộ Google Sheets và in ấn A4 chuẩn quy định.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
