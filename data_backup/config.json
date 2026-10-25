@@ -1,0 +1,23 @@
+{
+  "departmentName": "SỞ GD & ĐT TP ĐỒNG NAI",
+  "schoolName": "TRƯỜNG PTDTNT THPT BÌNH PHƯỚC",
+  "gradeLevel": "Khối 12",
+  "academicYear": "2026 – 2027",
+  "weekOneStartDate": "2026-09-07",
+  "scriptUrl": "",
+  "lockedWeeks": {},
+  "subjectsList": [
+    "Toán",
+    "Lí",
+    "Hóa",
+    "Sinh",
+    "Công nghệ",
+    "Anh",
+    "Ngữ văn",
+    "Sử",
+    "Địa lí",
+    "GDKTPL",
+    "Tin học"
+  ],
+  "publicAppUrl": ""
+}

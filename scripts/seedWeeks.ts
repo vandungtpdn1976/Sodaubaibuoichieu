@@ -225,45 +225,48 @@ const CURRICULUM: Record<string, string[]> = {
 // Teacher roster per subject
 const TEACHER_MAP: Record<string, TeacherAssignment[]> = {
   Toán: [
-    { id: 'gv_01', teacherName: 'Nguyễn Anh Tuấn', email: 'tuan.na@gmail.com', subject: 'Toán' },
-    { id: 'gv_02', teacherName: 'Nguyễn Thị Thúy', email: 'thuy.nt@gmail.com', subject: 'Toán' },
+    { id: 'gv_01', teacherName: 'Nguyễn Anh Tuấn', email: 'totoancvabd@gmail.com', subject: 'Toán' },
+    { id: 'gv_02', teacherName: 'Nguyễn Thị Thúy', email: 'thuycuong111107@gmail.com', subject: 'Toán' },
   ],
   Lí: [
-    { id: 'gv_03', teacherName: 'Vũ Thanh Thủy', email: 'thuy.vt@gmail.com', subject: 'Lí' },
-    { id: 'gv_04', teacherName: 'Võ Tấn Hùng', email: 'hung.vt@gmail.com', subject: 'Lí' },
-    { id: 'gv_05', teacherName: 'Lý Xuân Trưng', email: 'trung.lx@gmail.com', subject: 'Lí' },
+    { id: 'gv_03', teacherName: 'Vũ Thanh Thủy', email: 'thuymy.vu@gmail.com', subject: 'Lí' },
+    { id: 'gv_04', teacherName: 'Võ Tấn Hùng', email: 'vthung1308@gmail.com', subject: 'Lí' },
+    { id: 'gv_05', teacherName: 'Lý Xuân Trưng', email: 'xuantrungly78@gmail.com', subject: 'Lí' },
   ],
   Hóa: [
-    { id: 'gv_08', teacherName: 'Nguyễn Huy Hoàng', email: 'hoang.nh@gmail.com', subject: 'Hóa' },
-    { id: 'gv_09', teacherName: 'Đỗ Thị Thu Phương', email: 'phuong.dtt@gmail.com', subject: 'Hóa' },
-    { id: 'gv_10', teacherName: 'Hà Thị Thúy Hằng', email: 'hang.htt@gmail.com', subject: 'Hóa' },
+    { id: 'gv_08', teacherName: 'Nguyễn Huy Hoàng', email: 'nguyenhuyhoang171079@gmail.com', subject: 'Hóa' },
+    { id: 'gv_09', teacherName: 'Đỗ Thị Thu Phương', email: 'thuphuong.dtntbp@gmail.com', subject: 'Hóa' },
+    { id: 'gv_10', teacherName: 'Hà Thị Thúy Hằng', email: 'hanghoak7@gmail.com', subject: 'Hóa' },
   ],
   Sinh: [
-    { id: 'gv_11', teacherName: 'Đàm Thị Vân', email: 'van.dtv@gmail.com', subject: 'Sinh' },
+    { id: 'gv_11', teacherName: 'Đàm Thị Vân', email: 'damvanhungvuong@gmail.com', subject: 'Sinh' },
   ],
   'Tin học': [
-    { id: 'gv_06', teacherName: 'Nguyễn Thị Giang', email: 'giang.nt@gmail.com', subject: 'Tin học' },
-    { id: 'gv_07', teacherName: 'Lê Thị Mỹ Anh', email: 'anh.ltm@gmail.com', subject: 'Tin học' },
+    { id: 'gv_06', teacherName: 'Nguyễn Thị Giang', email: 'giang160677dtntbp@gmail.com', subject: 'Tin học' },
+    { id: 'gv_07', teacherName: 'Lê Thị Mỹ Anh', email: 'anh.blue.86@gmail.com', subject: 'Tin học' },
   ],
   'Ngữ văn': [
     { id: 'gv_12', teacherName: 'Huỳnh T.Tư Em', email: 'em.htt@gmail.com', subject: 'Ngữ văn' },
     { id: 'gv_13', teacherName: 'Trần Thị Thanh Hà', email: 'ha.ttt@gmail.com', subject: 'Ngữ văn' },
   ],
   Anh: [
-    { id: 'gv_14', teacherName: 'Vũ Minh Hằng', email: 'hang.vm@gmail.com', subject: 'Anh' },
-    { id: 'gv_15', teacherName: 'Nguyễn Thị Bích Thuận', email: 'thuan.ntb@gmail.com', subject: 'Anh' },
-    { id: 'gv_16', teacherName: 'Bùi Thị Nhiệm', email: 'nhiem.bt@gmail.com', subject: 'Anh' },
+    { id: 'gv_14', teacherName: 'Vũ Minh Hằng', email: 'vuminhhang2803@gmail.com', subject: 'Anh' },
+    { id: 'gv_15', teacherName: 'Nguyễn Thị Bích Thuận', email: 'nguyentbichthuan@gmail.com', subject: 'Anh' },
+    { id: 'gv_16', teacherName: 'Bùi Thị Nhiệm', email: 'nhiembuinew2dxbp@gmail.com', subject: 'Anh' },
   ],
   Sử: [
     { id: 'gv_17', teacherName: 'Võ Văn Dũng', email: 'vandungtpdn1976@gmail.com', subject: 'Sử' },
-    { id: 'gv_18', teacherName: 'Hồ Thị Bắc', email: 'bac.htb@gmail.com', subject: 'Sử' },
+    { id: 'gv_18', teacherName: 'Hồ Thị Bắc', email: 'hobacbp@gmail.com', subject: 'Sử' },
   ],
   'Địa lí': [
-    { id: 'gv_19', teacherName: 'Mai Thị Quỳ', email: 'quy.mt@gmail.com', subject: 'Địa lí' },
+    { id: 'gv_19', teacherName: 'Mai Thị Quỳ', email: 'quythuan80@gmail.com', subject: 'Địa lí' },
     { id: 'gv_20', teacherName: 'Lục Hữu Bằng', email: 'bang.lh@gmail.com', subject: 'Địa lí' },
   ],
   GDKTPL: [
     { id: 'gv_21', teacherName: 'Hà Thị Thanh Huyền', email: 'huyen.htt@gmail.com', subject: 'GDKTPL' },
+  ],
+  'Công nghệ': [
+    { id: 'gv_22', teacherName: 'Trần Quốc Bảo', email: 'minhanhminh8790@gmail.com', subject: 'Công nghệ' },
   ],
 };
 

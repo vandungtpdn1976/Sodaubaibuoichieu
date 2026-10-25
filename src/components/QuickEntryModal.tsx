@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Zap, X, Check, Plus, Calendar, Clock, BookOpen, User, Mail } from 'lucide-react';
 import { LogPeriodEntry, SchoolConfig, TeacherAssignment, CurrentUser } from '../types';
 import { getDateForDayOfWeek } from '../utils/dateUtils';
+import { getTeacherAssignedSubject, checkIsAdmin } from '../utils/permissionUtils';
 
 interface QuickEntryModalProps {
   isOpen: boolean;
@@ -26,23 +27,35 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   onApplyBatch,
   initialDay = 3, // Default to Thứ 3
 }) => {
+  const isAdminUser = checkIsAdmin(currentUser.email) || currentUser.role === 'admin';
+  const assignedSubject = getTeacherAssignedSubject(currentUser, teachers);
+  const defaultSubj = (assignedSubject && assignedSubject !== 'ALL') ? assignedSubject : (currentUser.assignedSubject || 'Sử');
+
   const [selectedDay, setSelectedDay] = useState<number>(initialDay);
-  const [selectedSubject, setSelectedSubject] = useState<string>(
-    currentUser.role === 'teacher' && currentUser.assignedSubject
-      ? currentUser.assignedSubject
-      : 'Hóa'
-  );
+  const [selectedSubject, setSelectedSubject] = useState<string>(defaultSubj);
   const [targetClusterOption, setTargetClusterOption] = useState<string>('new'); // 'new' or cluster index string
   const [selectedPeriods, setSelectedPeriods] = useState<number[]>([1, 2, 3, 4]); // Default 1, 2, 3, 4
   const [startPPCT, setStartPPCT] = useState<string>('5');
-  const [lessonTitle, setLessonTitle] = useState<string>('Liên kết hoá học');
+  const [lessonTitle, setLessonTitle] = useState<string>(
+    isAdminUser ? 'Lịch sử Việt Nam giai đoạn cận đại' : 'Bài học chuyên đề ôn thi HSG'
+  );
   const [absentStudents, setAbsentStudents] = useState<string>('');
   const [teacherName, setTeacherName] = useState<string>(() => {
-    const t = teachers.find((tc) => tc.subject === 'Hóa');
+    if (isAdminUser && currentUser.email.toLowerCase() === 'vandungtpdn1976@gmail.com') return 'Võ Văn Dũng';
+    const myTeacher = teachers.find(
+      (tc) => tc.email.toLowerCase() === currentUser.email.toLowerCase()
+    );
+    if (myTeacher) return myTeacher.teacherName;
+    const t = teachers.find((tc) => tc.subject === defaultSubj);
     return t ? t.teacherName : currentUser.name;
   });
   const [teacherEmail, setTeacherEmail] = useState<string>(() => {
-    const t = teachers.find((tc) => tc.subject === 'Hóa');
+    if (isAdminUser && currentUser.email.toLowerCase() === 'vandungtpdn1976@gmail.com') return 'vandungtpdn1976@gmail.com';
+    const myTeacher = teachers.find(
+      (tc) => tc.email.toLowerCase() === currentUser.email.toLowerCase()
+    );
+    if (myTeacher) return myTeacher.email;
+    const t = teachers.find((tc) => tc.subject === defaultSubj);
     return t ? t.email : currentUser.email;
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -273,11 +286,15 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                 onChange={(e) => handleSubjectChange(e.target.value)}
                 className="w-full px-2.5 py-2 border border-slate-300 rounded-lg font-bold text-blue-950 bg-white"
               >
-                {config.subjectsList.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
+                {(() => {
+                  const teacherSubj = getTeacherAssignedSubject(currentUser, teachers);
+                  const allowed = (teacherSubj && teacherSubj !== 'ALL') ? [teacherSubj] : config.subjectsList;
+                  return allowed.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ));
+                })()}
               </select>
             </div>
 

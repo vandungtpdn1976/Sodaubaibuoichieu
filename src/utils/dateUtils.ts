@@ -73,3 +73,31 @@ export function getCurrentDateVietnamese(): string {
   const y = now.getFullYear();
   return `ngày ${d < 10 ? '0' + d : d} tháng ${m < 10 ? '0' + m : m} năm ${y}`;
 }
+
+/**
+ * Calculates the current academic week number (1 to 35) based on school start date (YYYY-MM-DD)
+ * and the current local date (Vietnam time).
+ */
+export function calculateCurrentWeekFromStartDate(weekOneStartDateStr: string): number {
+  try {
+    const week1Start = parseISODate(weekOneStartDateStr);
+    const now = new Date();
+    // Normalize both to midnight
+    const startMidnight = new Date(week1Start.getFullYear(), week1Start.getMonth(), week1Start.getDate());
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const diffMs = todayMidnight.getTime() - startMidnight.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return 1; // Before start date, default to Week 1
+    }
+
+    const calculatedWeek = Math.floor(diffDays / 7) + 1;
+    return Math.max(1, Math.min(35, calculatedWeek));
+  } catch (err) {
+    console.warn('Could not calculate current week from start date', err);
+    return 5; // Fallback
+  }
+}
+

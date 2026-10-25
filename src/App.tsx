@@ -18,7 +18,11 @@ import {
   DEFAULT_CURRENT_USER,
   checkIsAdmin,
 } from './constants/initialData';
-import { getWeekDateRange, getDateForDayOfWeek } from './utils/dateUtils';
+import {
+  getWeekDateRange,
+  getDateForDayOfWeek,
+  calculateCurrentWeekFromStartDate,
+} from './utils/dateUtils';
 import { ApiService } from './services/apiService';
 import { exportCurrentWeekToExcelJS, exportSemesterToExcelJS } from './utils/excelExport';
 
@@ -33,6 +37,8 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { AppsScriptModal } from './components/AppsScriptModal';
 import { StatisticsModal } from './components/StatisticsModal';
 import { ShareModal } from './components/ShareModal';
+import { LoginModal } from './components/LoginModal';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 
 import {
   AlertCircle,
@@ -46,8 +52,10 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [currentWeek, setCurrentWeek] = useState<number>(5); // Default Week 5 per prompt
   const [config, setConfig] = useState<SchoolConfig>(() => ApiService.loadConfig());
+  const [currentWeek, setCurrentWeek] = useState<number>(() =>
+    calculateCurrentWeekFromStartDate(ApiService.loadConfig().weekOneStartDate)
+  );
   const [teachers, setTeachers] = useState<TeacherAssignment[]>(() =>
     ApiService.loadTeachers()
   );
@@ -58,10 +66,22 @@ export default function App() {
     ApiService.loadCurrentUser()
   );
 
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() =>
+    ApiService.checkIsAuthenticated()
+  );
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState<boolean>(false);
+  const [isFirstLoginChange, setIsFirstLoginChange] = useState<boolean>(false);
+
+  const handleLogout = useCallback(() => {
+    ApiService.logout();
+    setIsAuthenticated(false);
+  }, []);
+
   const [entries, setEntries] = useState<LogPeriodEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('');
+  const [selectedTeacherFilter, setSelectedTeacherFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [isQuickEntryOpen, setIsQuickEntryOpen] = useState(false);
@@ -94,23 +114,33 @@ export default function App() {
 
   const handleSelectUser = useCallback(
     (user: CurrentUser) => {
+      const isDung = user.email.toLowerCase() === 'vandungtpdn1976@gmail.com';
       const isAdminUser = checkIsAdmin(user.email);
       const updated: CurrentUser = isAdminUser
         ? {
             ...user,
-            name:
-              user.email.toLowerCase() === 'vandungtpdn1976@gmail.com'
-                ? 'Thầy Võ Văn Dũng'
-                : user.name,
+            name: isDung ? 'Thầy Võ Văn Dũng' : user.name,
             role: 'admin',
+            assignedSubject: isDung ? (user.assignedSubject || 'Sử') : user.assignedSubject,
+            position: isDung ? (user.position || 'Tổ trưởng') : user.position,
           }
         : user;
 
       setCurrentUser(updated);
       ApiService.saveCurrentUser(updated);
+
+      // Reset filters when switching to SUPER_ADMIN / Admin to ensure full visibility
+      if (isAdminUser) {
+        setSelectedTeacherFilter('');
+        setSelectedSubjectFilter('');
+        setSearchQuery('');
+      }
+
       showToast(
         `Đã kích hoạt tài khoản: ${updated.name} (${
-          updated.role === 'admin'
+          isDung
+            ? 'Quản trị viên BGH & GV Môn Sử (Hiển thị toàn trường)'
+            : updated.role === 'admin'
             ? 'Phó Hiệu trưởng chuyên môn / Quản trị viên'
             : `GV Môn ${updated.assignedSubject || ''}`
         })`,
@@ -144,7 +174,13 @@ export default function App() {
 
   useEffect(() => {
     loadCurrentWeek(currentWeek);
-  }, [currentWeek, loadCurrentWeek]);
+    // Reset filters for Admin when switching weeks so no teacher entries are hidden
+    if (currentUser.role === 'admin' || checkIsAdmin(currentUser.email)) {
+      setSelectedTeacherFilter('');
+      setSelectedSubjectFilter('');
+      setSearchQuery('');
+    }
+  }, [currentWeek, loadCurrentWeek, currentUser.email, currentUser.role]);
 
   // Sync initial config & teachers from central server
   useEffect(() => {
@@ -478,6 +514,25 @@ export default function App() {
       if (selectedSubjectFilter && e.subject !== selectedSubjectFilter) {
         return false;
       }
+      if (selectedTeacherFilter) {
+        if (selectedTeacherFilter === 'my_periods') {
+          const sig = (e.teacherSignature || '').toLowerCase();
+          const email = (e.teacherEmail || '').toLowerCase();
+          const isMySig = sig.includes('dũng') || sig.includes('võ văn dũng');
+          const isMyEmail = email === 'vandungtpdn1976@gmail.com';
+          const isMySubj = e.subject === 'Sử';
+          if (!isMySig && !isMyEmail && !isMySubj) {
+            return false;
+          }
+        } else {
+          const target = selectedTeacherFilter.toLowerCase().trim();
+          const sig = (e.teacherSignature || '').toLowerCase().trim();
+          const email = (e.teacherEmail || '').toLowerCase().trim();
+          if (sig !== target && email !== target && !sig.includes(target)) {
+            return false;
+          }
+        }
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchTitle = e.lessonTitle?.toLowerCase().includes(q);
@@ -490,7 +545,58 @@ export default function App() {
       }
       return true;
     });
-  }, [entries, selectedSubjectFilter, searchQuery]);
+  }, [entries, selectedSubjectFilter, selectedTeacherFilter, searchQuery]);
+
+  const handleSyncFromSheets = async () => {
+    showToast('Đang kết nối và đồng bộ toàn bộ sổ đầu bài từ Google Sheets...', 'info');
+    const res = await ApiService.syncFromSheets();
+    if (res.success) {
+      showToast(res.message, 'success');
+      loadCurrentWeek(currentWeek);
+    } else {
+      showToast(res.message, 'error');
+    }
+  };
+
+  const handlePushWeeks1To7 = useCallback(async () => {
+    showToast('Đang lưu và đẩy toàn bộ dữ liệu từ Tuần 1 đến Tuần 7 sang Google Sheets...', 'info');
+    const res = await ApiService.pushWeeksToSheets(1, 7, config);
+    if (res.success) {
+      showToast(res.message, 'success');
+    } else {
+      showToast(res.message, 'error');
+    }
+  }, [config, showToast]);
+
+  // Trigger automatic sync/push of Weeks 1 to 7 to Google Sheets if scriptUrl is configured
+  useEffect(() => {
+    if (config.scriptUrl && config.scriptUrl.trim()) {
+      ApiService.pushWeeksToSheets(1, 7, config).then((res) => {
+        if (res.success) {
+          console.log('Successfully pushed Weeks 1-7 to Google Sheets:', res.message);
+        }
+      });
+    }
+  }, [config.scriptUrl]);
+
+  if (!isAuthenticated) {
+    return (
+      <LoginModal
+        onLoginSuccess={(user, isFirstLogin) => {
+          setCurrentUser(user);
+          if (isFirstLogin) {
+            setIsFirstLoginChange(true);
+            setShowChangePasswordModal(true);
+          } else {
+            setIsAuthenticated(true);
+            showToast(`Xác thực thành công: ${user.name}!`, 'success');
+          }
+        }}
+        configSchoolName={config.schoolName}
+        configAcademicYear={config.academicYear}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-800">
@@ -510,6 +616,11 @@ export default function App() {
         onOpenShare={() => setIsShareOpen(true)}
         activeTab="table"
         setActiveTab={() => {}}
+        onLogout={handleLogout}
+        onChangePasswordClick={() => {
+          setIsFirstLoginChange(false);
+          setShowChangePasswordModal(true);
+        }}
       />
 
       {/* 2. Week Selection & Toolbar */}
@@ -524,6 +635,9 @@ export default function App() {
         currentUser={currentUser}
         selectedSubjectFilter={selectedSubjectFilter}
         onSelectSubjectFilter={setSelectedSubjectFilter}
+        teachers={teachers}
+        selectedTeacherFilter={selectedTeacherFilter}
+        onSelectTeacherFilter={setSelectedTeacherFilter}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenQuickEntry={() => {
@@ -538,21 +652,25 @@ export default function App() {
           setStatisticsInitialTab('allWeeks');
           setIsStatisticsOpen(true);
         }}
+        onSyncFromSheets={handleSyncFromSheets}
+        onPushWeeks1To7={handlePushWeeks1To7}
       />
 
       {/* 3. Main Workspace Area */}
       <main className="no-print flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
         {/* Admin Live Overview Banner */}
         {currentUser.role === 'admin' && (
-          <div className="mb-4 p-3.5 bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="mb-4 p-3.5 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0 text-emerald-300">
-                <ShieldCheck className="w-4 h-4" />
+              <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center shrink-0 text-emerald-300">
+                <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold uppercase tracking-wide">
-                    Quyền Quản trị viên (Ban Giám Hiệu): Thầy Võ Văn Dũng
+                    {currentUser.email.toLowerCase() === 'vandungtpdn1976@gmail.com'
+                      ? 'Quản trị viên (BGH) kiêm Tổ trưởng Môn Sử: Thầy Võ Văn Dũng'
+                      : `Quản trị viên: ${currentUser.name}`}
                   </span>
                   <span className="text-[10px] bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
@@ -560,11 +678,29 @@ export default function App() {
                   </span>
                 </div>
                 <p className="text-xs text-blue-200 mt-0.5">
-                  Tất cả các tiết PPCT, tên bài học, học sinh vắng và chữ ký do giáo viên các bộ môn nhập đều được lưu tập trung và hiển thị đầy đủ ngay tại đây.
+                  Tài khoản của bạn vừa là Giáo viên được phân công (Môn Sử) vừa làm nhiệm vụ Quản trị viên. Toàn bộ các tiết dạy, bài học, học sinh vắng và chữ ký của tất cả các giáo viên trong tuần được hiển thị đầy đủ ngay bên dưới.
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {currentUser.email.toLowerCase() === 'vandungtpdn1976@gmail.com' && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedTeacherFilter(
+                      selectedTeacherFilter === 'my_periods' ? '' : 'my_periods'
+                    )
+                  }
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 shadow-2xs ${
+                    selectedTeacherFilter === 'my_periods'
+                      ? 'bg-amber-400 text-slate-950 ring-2 ring-white'
+                      : 'bg-white/20 hover:bg-white/30 text-white'
+                  }`}
+                  title="Lọc nhanh xem riêng các tiết dạy Môn Sử của Thầy Võ Văn Dũng"
+                >
+                  <span>⭐ Tiết Môn Sử của tôi</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -574,15 +710,24 @@ export default function App() {
                 className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 shadow-2xs"
               >
                 <Calendar className="w-3.5 h-3.5 text-blue-200" />
-                <span>Xem tiến độ giáo viên cả 35 tuần</span>
+                <span>Tiến độ 35 tuần</span>
               </button>
+              {selectedTeacherFilter && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedTeacherFilter('')}
+                  className="px-3 py-1.5 bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shrink-0"
+                >
+                  ✕ Bỏ lọc GV (Xem tất cả)
+                </button>
+              )}
               {selectedSubjectFilter && (
                 <button
                   type="button"
                   onClick={() => setSelectedSubjectFilter('')}
                   className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shrink-0"
                 >
-                  ✕ Đang lọc môn {selectedSubjectFilter} (Bấm hiện tất cả)
+                  ✕ Bỏ lọc môn (Xem tất cả)
                 </button>
               )}
             </div>
@@ -644,6 +789,11 @@ export default function App() {
             }}
             onOpenAbsentModal={(e) => setAbsentModalEntry(e)}
             filteredEntries={filteredEntries}
+            selectedTeacherFilter={selectedTeacherFilter}
+            onSelectTeacherFilter={setSelectedTeacherFilter}
+            selectedSubjectFilter={selectedSubjectFilter}
+            onSelectSubjectFilter={setSelectedSubjectFilter}
+            searchQuery={searchQuery}
           />
         )}
 
@@ -786,6 +936,21 @@ export default function App() {
           config={config}
           onSaveConfig={handleSaveConfig}
           teachers={teachers}
+        />
+      )}
+
+      {/* Change Password Modal */}
+      {showChangePasswordModal && (
+        <ChangePasswordModal
+          userEmail={currentUser.email}
+          userName={currentUser.name}
+          isFirstLogin={isFirstLoginChange}
+          onSuccess={() => {
+            setShowChangePasswordModal(false);
+            setIsAuthenticated(true);
+            showToast('Đã cập nhật mật khẩu mới thành công!', 'success');
+          }}
+          onCancel={!isFirstLoginChange ? () => setShowChangePasswordModal(false) : undefined}
         />
       )}
 

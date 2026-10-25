@@ -54,9 +54,13 @@ function doGet(e) {
     initSystemSheets(ss);
 
     if (action === "ping" || action === "test") {
+      var rawSheet = ss.getSheetByName(SHEET_RAW_DATA);
+      var recordsCount = rawSheet ? Math.max(0, rawSheet.getLastRow() - 1) : 0;
       output.message = "Kết nối Google Apps Script thành công!";
       output.spreadsheetName = ss.getName();
-      output.time = new Date().toISOString();
+      output.time = new Date().toLocaleString("vi-VN");
+      output.rawRecordsCount = recordsCount;
+      output.activeSheetsCount = ss.getSheets().length;
     } else if (action === "getConfig") {
       output.data = loadConfig(ss);
     } else if (action === "getAssignments") {

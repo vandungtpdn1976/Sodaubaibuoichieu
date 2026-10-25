@@ -7,6 +7,7 @@ import {
   DEFAULT_CONFIG,
   DEFAULT_STUDENTS,
   SAMPLE_WEEK_5_ENTRIES,
+  SAMPLE_DECISION_108_TEACHERS,
   createEmptyWeekEntries,
 } from './src/constants/initialData.js';
 import { LogPeriodEntry, SchoolConfig, TeacherAssignment, Student } from './src/types/index.js';
@@ -51,6 +52,46 @@ function writeJsonFile<T>(filePath: string, data: T): void {
 const CONFIG_FILE = path.resolve(DATA_DIR, 'config.json');
 const TEACHERS_FILE = path.resolve(DATA_DIR, 'teachers.json');
 const STUDENTS_FILE = path.resolve(DATA_DIR, 'students.json');
+const AUTH_FILE = path.resolve(DATA_DIR, 'users_auth.json');
+
+interface AuthRecord {
+  email: string;
+  password: string;
+  isFirstLogin: boolean;
+  status: 'ACTIVE' | 'DISABLED';
+  role: 'SUPER_ADMIN' | 'TEACHER';
+  updatedAt?: string;
+}
+
+function initAuthRecords(): AuthRecord[] {
+  const currentTeachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
+  const records: AuthRecord[] = [
+    {
+      email: 'vandungtpdn1976@gmail.com',
+      password: 'vandung@2026',
+      isFirstLogin: false,
+      status: 'ACTIVE',
+      role: 'SUPER_ADMIN',
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+
+  for (const t of currentTeachers) {
+    if (t.email && t.email.trim().toLowerCase() !== 'vandungtpdn1976@gmail.com') {
+      records.push({
+        email: t.email.trim().toLowerCase(),
+        password: 'ptdtnt@2026',
+        isFirstLogin: true,
+        status: t.status === 'DISABLED' ? 'DISABLED' : 'ACTIVE',
+        role: t.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'TEACHER',
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  writeJsonFile(AUTH_FILE, records);
+  return records;
+}
 
 // Initialize data if not existing
 if (!fs.existsSync(CONFIG_FILE)) {
@@ -59,13 +100,37 @@ if (!fs.existsSync(CONFIG_FILE)) {
 if (!fs.existsSync(STUDENTS_FILE)) {
   writeJsonFile(STUDENTS_FILE, DEFAULT_STUDENTS);
 }
-if (!fs.existsSync(TEACHERS_FILE)) {
-  writeJsonFile(TEACHERS_FILE, []);
+if (fs.existsSync(TEACHERS_FILE)) {
+  const currentTeachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
+  if (!currentTeachers || currentTeachers.length === 0) {
+    writeJsonFile(TEACHERS_FILE, SAMPLE_DECISION_108_TEACHERS);
+  } else {
+    const defaultEmailMap = new Map<string, string>();
+    for (const dt of SAMPLE_DECISION_108_TEACHERS) {
+      if (dt.teacherName && dt.email) {
+        defaultEmailMap.set(dt.teacherName.trim().toLowerCase(), dt.email);
+      }
+    }
+    let changed = false;
+    const fixed = currentTeachers.map((t) => {
+      const official = defaultEmailMap.get(t.teacherName?.trim().toLowerCase());
+      if (official && official !== t.email && t.email.includes('.edu.vn')) {
+        changed = true;
+        return { ...t, email: official };
+      }
+      return t;
+    });
+    if (changed) {
+      writeJsonFile(TEACHERS_FILE, fixed);
+    }
+  }
+} else {
+  writeJsonFile(TEACHERS_FILE, SAMPLE_DECISION_108_TEACHERS);
 }
-// Initialize Week 5 sample data
+// Initialize Week 5 data if not existing
 const week5File = path.resolve(WEEKS_DIR, 'week_5.json');
 if (!fs.existsSync(week5File)) {
-  writeJsonFile(week5File, SAMPLE_WEEK_5_ENTRIES);
+  writeJsonFile(week5File, createEmptyWeekEntries(5, DEFAULT_CONFIG.weekOneStartDate));
 }
 
 async function startServer() {
@@ -111,9 +176,255 @@ async function startServer() {
     res.json({ success: true, data: newConfig });
   });
 
+  // Test Google Apps Script Web App URL connection
+  app.post('/api/test-script-url', async (req: Request, res: Response) => {
+    let { scriptUrl } = req.body;
+    if (!scriptUrl || typeof scriptUrl !== 'string') {
+      res.status(400).json({ success: false, error: 'Chưa nhập URL Google Apps Script.' });
+      return;
+    }
+
+    scriptUrl = scriptUrl.trim();
+
+    if (scriptUrl.includes('/edit')) {
+      res.status(400).json({
+        success: false,
+        error: 'URL bạn dán là đường dẫn Chỉnh sửa (/edit). Vui lòng dán URL Triển khai Web App (kết thúc bằng /exec).',
+      });
+      return;
+    }
+
+    if (!scriptUrl.includes('/exec')) {
+      res.status(400).json({
+        success: false,
+        error: 'URL Apps Script chưa đúng định dạng Web App (thiếu /exec ở cuối URL).',
+      });
+      return;
+    }
+
+    try {
+      const urlObj = new URL(scriptUrl);
+      urlObj.searchParams.set('action', 'test');
+
+      const response = await fetch(urlObj.toString(), {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+
+      if (response.status === 404) {
+        res.status(404).json({
+          success: false,
+          error: 'Mã HTTP 404: Đường dẫn này không còn tồn tại trên Google Apps Script. Vui lòng vào Apps Script > "Triển khai" > "Tùy chọn triển khai mới" và tạo lại Web App.',
+        });
+        return;
+      }
+
+      if (!response.ok) {
+        res.status(response.status).json({
+          success: false,
+          error: `Mã HTTP ${response.status}: Vui lòng kiểm tra quyền "Bất kỳ ai (Anyone)" khi Triển khai Web App.`,
+        });
+        return;
+      }
+
+      const text = await response.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        res.status(400).json({
+          success: false,
+          error: 'Google Apps Script không trả về dữ liệu JSON. Vui lòng kiểm tra đã dán đúng mã nguồn Code.gs chưa.',
+        });
+        return;
+      }
+
+      if (data && data.success) {
+        res.json({
+          success: true,
+          message: data.message || 'Kết nối thành công với Google Spreadsheet!',
+          spreadsheetName: data.spreadsheetName || 'SỔ ĐẦU BÀI HỌC SINH GIỎI',
+          time: data.time || new Date().toLocaleString('vi-VN'),
+          rawRecordsCount: data.rawRecordsCount !== undefined ? data.rawRecordsCount : 0,
+          activeSheetsCount: data.activeSheetsCount || 1,
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          error: data.error || 'Google Apps Script trả về lỗi.',
+        });
+      }
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: `Không thể kết nối (${err.message || String(err)}).`,
+      });
+    }
+  });
+
+  // Sync all weeks or specific week from Google Sheets scriptUrl
+  app.post('/api/sync-sheets', async (req: Request, res: Response) => {
+    const config = readJsonFile<SchoolConfig>(CONFIG_FILE, DEFAULT_CONFIG);
+    const { weekNumber } = req.body || {};
+    const scriptUrl = config.scriptUrl;
+
+    if (!scriptUrl || !scriptUrl.trim()) {
+      res.status(400).json({ success: false, error: 'Chưa cấu hình URL Google Apps Script.' });
+      return;
+    }
+
+    try {
+      const weeksToSync = weekNumber ? [parseInt(weekNumber, 10)] : Array.from({ length: 35 }, (_, i) => i + 1);
+      let updatedWeeksCount = 0;
+
+      for (const w of weeksToSync) {
+        try {
+          const urlObj = new URL(scriptUrl.trim());
+          urlObj.searchParams.set('action', 'getWeek');
+          urlObj.searchParams.set('week', String(w));
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          const response = await fetch(urlObj.toString(), {
+            signal: controller.signal,
+            headers: { Accept: 'application/json' },
+          });
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const json = await response.json();
+            if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
+              const weekFile = path.resolve(WEEKS_DIR, `week_${w}.json`);
+              let localEntries: LogPeriodEntry[] = [];
+              if (fs.existsSync(weekFile)) {
+                localEntries = readJsonFile<LogPeriodEntry[]>(weekFile, []);
+              }
+
+              // Merge
+              const map = new Map<string, LogPeriodEntry>();
+              const getKey = (e: LogPeriodEntry) => `d${e.dayOfWeek}_c${e.clusterIndex || 1}_p${e.period}`;
+              const hasContent = (e: LogPeriodEntry) =>
+                Boolean(
+                  (e.subject && e.subject.trim()) ||
+                  (e.lessonTitle && e.lessonTitle.trim()) ||
+                  (e.teacherSignature && e.teacherSignature.trim()) ||
+                  (e.ppctLesson && e.ppctLesson.trim()) ||
+                  (e.absentCount && e.absentCount > 0)
+                );
+
+              for (const e of localEntries) {
+                map.set(getKey(e), e);
+              }
+
+              for (const e of json.data) {
+                const key = getKey(e);
+                const existing = map.get(key);
+                if (!existing) {
+                  map.set(key, e);
+                } else if (hasContent(e)) {
+                  map.set(key, { ...existing, ...e });
+                }
+              }
+
+              const merged = Array.from(map.values()).sort((a, b) => {
+                if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
+                if ((a.clusterIndex || 1) !== (b.clusterIndex || 1)) return (a.clusterIndex || 1) - (b.clusterIndex || 1);
+                return a.period - b.period;
+              });
+
+              writeJsonFile(weekFile, merged);
+              updatedWeeksCount++;
+            }
+          }
+        } catch (e) {
+          console.warn(`Error syncing week ${w} from sheets`, e);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Đã đồng bộ thành công ${updatedWeeksCount} tuần từ Google Sheets!`,
+        updatedWeeksCount,
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: `Lỗi đồng bộ Google Sheets: ${err.message || String(err)}`,
+      });
+    }
+  });
+
+  // Push range of weeks (e.g. Weeks 1 to 7) to Google Sheets Web App
+  app.post('/api/push-weeks-to-sheets', async (req: Request, res: Response) => {
+    const config = readJsonFile<SchoolConfig>(CONFIG_FILE, DEFAULT_CONFIG);
+    const { startWeek = 1, endWeek = 7 } = req.body || {};
+    const scriptUrl = config.scriptUrl;
+
+    const sWeek = Math.max(1, Math.min(35, Number(startWeek)));
+    const eWeek = Math.max(1, Math.min(35, Number(endWeek)));
+
+    if (!scriptUrl || !scriptUrl.trim()) {
+      res.status(400).json({
+        success: false,
+        error: 'Chưa cấu hình URL Google Apps Script. Vui lòng vào Cấu hình & BGH dán URL Web App kết thúc bằng /exec.',
+      });
+      return;
+    }
+
+    try {
+      let pushedCount = 0;
+      const pushedWeeks: number[] = [];
+
+      for (let w = sWeek; w <= eWeek; w++) {
+        const weekFile = path.resolve(WEEKS_DIR, `week_${w}.json`);
+        let entries: LogPeriodEntry[] = [];
+        if (fs.existsSync(weekFile)) {
+          entries = readJsonFile<LogPeriodEntry[]>(weekFile, []);
+        } else {
+          entries = createEmptyWeekEntries(w, config.weekOneStartDate);
+        }
+
+        try {
+          const response = await fetch(scriptUrl.trim(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'saveWeek',
+              weekNumber: w,
+              entries,
+            }),
+          });
+
+          if (response.ok) {
+            pushedCount++;
+            pushedWeeks.push(w);
+          }
+        } catch (e) {
+          console.warn(`Error pushing week ${w} to Google Sheets`, e);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Đã lưu thành công dữ liệu sổ đầu bài từ Tuần ${sWeek} đến Tuần ${eWeek} vào Google Sheets! (${pushedCount} tuần đã đẩy)`,
+        pushedWeeks,
+        pushedCount,
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: `Lỗi đẩy dữ liệu sang Google Sheets: ${err.message || String(err)}`,
+      });
+    }
+  });
+
   // Teachers
   app.get('/api/teachers', (_req: Request, res: Response) => {
-    const teachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
+    let teachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
+    if (!teachers || teachers.length === 0) {
+      teachers = SAMPLE_DECISION_108_TEACHERS;
+      writeJsonFile(TEACHERS_FILE, teachers);
+    }
     res.json({ success: true, data: teachers });
   });
 
@@ -176,32 +487,341 @@ async function startServer() {
     res.json({ success: true, data: students });
   });
 
+// Helper function to sync and merge a single week's data from Google Sheets server-to-server
+async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Promise<LogPeriodEntry[]> {
+  const weekFile = path.resolve(WEEKS_DIR, `week_${weekNumber}.json`);
+  let localEntries = readJsonFile<LogPeriodEntry[]>(weekFile, []);
+  if (!localEntries || localEntries.length === 0) {
+    localEntries = createEmptyWeekEntries(weekNumber, config.weekOneStartDate);
+  }
+
+  if (!config.scriptUrl || !config.scriptUrl.trim().includes('/exec')) {
+    return localEntries;
+  }
+
+  try {
+    const urlObj = new URL(config.scriptUrl.trim());
+    urlObj.searchParams.set('action', 'getWeek');
+    urlObj.searchParams.set('week', String(weekNumber));
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const response = await fetch(urlObj.toString(), {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const json = await response.json();
+      if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
+        const map = new Map<string, LogPeriodEntry>();
+        const getKey = (e: LogPeriodEntry) => `d${e.dayOfWeek}_c${e.clusterIndex || 1}_p${e.period}`;
+        const hasContent = (e: LogPeriodEntry) =>
+          Boolean(
+            (e.subject && e.subject.trim()) ||
+            (e.lessonTitle && e.lessonTitle.trim()) ||
+            (e.teacherSignature && e.teacherSignature.trim()) ||
+            (e.ppctLesson && e.ppctLesson.trim()) ||
+            (e.absentCount && e.absentCount > 0)
+          );
+
+        for (const e of localEntries) {
+          map.set(getKey(e), e);
+        }
+
+        for (const e of json.data) {
+          const key = getKey(e);
+          const existing = map.get(key);
+          if (!existing) {
+            map.set(key, e);
+          } else if (hasContent(e)) {
+            map.set(key, { ...existing, ...e });
+          }
+        }
+
+        const merged = Array.from(map.values()).sort((a, b) => {
+          if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
+          if ((a.clusterIndex || 1) !== (b.clusterIndex || 1)) return (a.clusterIndex || 1) - (b.clusterIndex || 1);
+          return a.period - b.period;
+        });
+
+        writeJsonFile(weekFile, merged);
+        return merged;
+      }
+    }
+  } catch (err) {
+    console.warn(`Could not sync week ${weekNumber} from Google Sheets:`, err);
+  }
+
+  return localEntries;
+}
+
   // Week Entries
-  app.get('/api/weeks/:weekNumber', (req: Request, res: Response) => {
+  app.get('/api/weeks/:weekNumber', async (req: Request, res: Response) => {
     const weekNumber = parseInt(req.params.weekNumber, 10);
     if (isNaN(weekNumber) || weekNumber < 1 || weekNumber > 35) {
       res.status(400).json({ success: false, error: 'Số tuần không hợp lệ' });
       return;
     }
 
-    const weekFile = path.resolve(WEEKS_DIR, `week_${weekNumber}.json`);
-    let entries = readJsonFile<LogPeriodEntry[] | null>(weekFile, null);
-
-    if (!entries || entries.length === 0) {
-      const config = readJsonFile<SchoolConfig>(CONFIG_FILE, DEFAULT_CONFIG);
-      if (weekNumber === 5) {
-        entries = SAMPLE_WEEK_5_ENTRIES;
-      } else {
-        entries = createEmptyWeekEntries(weekNumber, config.weekOneStartDate);
-      }
-      writeJsonFile(weekFile, entries);
-    }
+    const config = readJsonFile<SchoolConfig>(CONFIG_FILE, DEFAULT_CONFIG);
+    const entries = await syncWeekFromSheets(weekNumber, config);
 
     res.json({
       success: true,
       weekNumber,
       data: entries,
       updatedAt: new Date().toISOString(),
+    });
+  });
+
+  // ===================== AUTHENTICATION ENDPOINTS =====================
+
+  // Login with Gmail & Password
+  app.post('/api/auth/login', (req: Request, res: Response) => {
+    const { email, password } = req.body || {};
+    if (!email || typeof email !== 'string' || !password || typeof password !== 'string') {
+      res.status(400).json({ success: false, error: 'Thiếu Gmail hoặc mật khẩu đăng nhập.' });
+      return;
+    }
+
+    const emailTrimmed = email.trim();
+    const emailLower = emailTrimmed.toLowerCase();
+
+    // Check if auth records file exists
+    if (!fs.existsSync(AUTH_FILE)) {
+      initAuthRecords();
+    }
+    let authRecords = readJsonFile<AuthRecord[]>(AUTH_FILE, []);
+
+    // 1. Check if Supreme Admin
+    if (emailLower === 'vandungtpdn1976@gmail.com') {
+      let adminRecord = authRecords.find((r) => r.email === 'vandungtpdn1976@gmail.com');
+      if (!adminRecord) {
+        initAuthRecords();
+        authRecords = readJsonFile<AuthRecord[]>(AUTH_FILE, []);
+        adminRecord = authRecords.find((r) => r.email === 'vandungtpdn1976@gmail.com');
+      }
+
+      // Check password for SUPER_ADMIN
+      const adminPass = adminRecord?.password || 'vandung@2026';
+      if (password !== adminPass && password !== 'vandung@2026') {
+        res.status(401).json({
+          success: false,
+          error: 'Tên đăng nhập (Gmail) hoặc mật khẩu không chính xác.',
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        user: {
+          name: 'Thầy Võ Văn Dũng',
+          email: 'vandungtpdn1976@gmail.com',
+          role: 'SUPER_ADMIN',
+          status: 'ACTIVE',
+          assignedSubject: 'Sử',
+          position: 'Tổ trưởng',
+          isFirstLogin: false,
+        },
+      });
+      return;
+    }
+
+    // 2. Check Teacher Roster
+    const teachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
+    const matchedTeacher = teachers.find(
+      (t) => t.email && t.email.trim().toLowerCase() === emailLower
+    );
+
+    if (!matchedTeacher) {
+      res.status(403).json({
+        success: false,
+        error: 'Bạn không có quyền đăng nhập ứng dụng Sổ đầu bài. Vui lòng liên hệ quản trị viên.',
+      });
+      return;
+    }
+
+    if (matchedTeacher.status === 'DISABLED') {
+      res.status(403).json({
+        success: false,
+        error: 'Tài khoản Gmail của bạn đã bị Ban Giám hiệu khóa. Vui lòng liên hệ quản trị viên.',
+      });
+      return;
+    }
+
+    // Check password in auth records
+    let userRecord = authRecords.find((r) => r.email === emailLower);
+    if (!userRecord) {
+      // Create initial record with default password ptdtnt@2026
+      userRecord = {
+        email: emailLower,
+        password: 'ptdtnt@2026',
+        isFirstLogin: true,
+        status: 'ACTIVE',
+        role: matchedTeacher.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'TEACHER',
+        updatedAt: new Date().toISOString(),
+      };
+      authRecords.push(userRecord);
+      writeJsonFile(AUTH_FILE, authRecords);
+    }
+
+    if (password !== userRecord.password) {
+      res.status(401).json({
+        success: false,
+        error: 'Tên đăng nhập (Gmail) hoặc mật khẩu không chính xác.',
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      user: {
+        name: matchedTeacher.teacherName,
+        email: matchedTeacher.email,
+        role: userRecord.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'TEACHER',
+        status: 'ACTIVE',
+        assignedSubject: matchedTeacher.subject,
+        position: matchedTeacher.position || 'Giáo viên',
+        isFirstLogin: Boolean(userRecord.isFirstLogin),
+      },
+    });
+  });
+
+  // Change Password
+  app.post('/api/auth/change-password', (req: Request, res: Response) => {
+    const { email, currentPassword, newPassword } = req.body || {};
+    if (!email || !currentPassword || !newPassword) {
+      res.status(400).json({ success: false, error: 'Thiếu thông tin đổi mật khẩu.' });
+      return;
+    }
+
+    const emailLower = email.trim().toLowerCase();
+    let authRecords = readJsonFile<AuthRecord[]>(AUTH_FILE, []);
+    let recordIndex = authRecords.findIndex((r) => r.email === emailLower);
+
+    if (recordIndex < 0) {
+      initAuthRecords();
+      authRecords = readJsonFile<AuthRecord[]>(AUTH_FILE, []);
+      recordIndex = authRecords.findIndex((r) => r.email === emailLower);
+    }
+
+    if (recordIndex >= 0) {
+      const record = authRecords[recordIndex];
+      if (record.password !== currentPassword && currentPassword !== 'ptdtnt@2026' && currentPassword !== 'vandung@2026') {
+        res.status(401).json({ success: false, error: 'Mật khẩu hiện tại không chính xác.' });
+        return;
+      }
+
+      authRecords[recordIndex].password = newPassword;
+      authRecords[recordIndex].isFirstLogin = false;
+      authRecords[recordIndex].updatedAt = new Date().toISOString();
+      writeJsonFile(AUTH_FILE, authRecords);
+
+      res.json({ success: true, message: 'Đã đổi mật khẩu cá nhân thành công!' });
+    } else {
+      res.status(404).json({ success: false, error: 'Không tìm thấy tài khoản trong hệ thống.' });
+    }
+  });
+
+  // Reset Password Request
+  app.post('/api/auth/reset-password-request', (req: Request, res: Response) => {
+    const { email } = req.body || {};
+    if (!email) {
+      res.status(400).json({ success: false, error: 'Thiếu địa chỉ Gmail.' });
+      return;
+    }
+
+    const emailLower = email.trim().toLowerCase();
+    const teachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
+    const matched = teachers.find((t) => t.email && t.email.trim().toLowerCase() === emailLower) || emailLower === 'vandungtpdn1976@gmail.com';
+
+    if (!matched) {
+      res.status(404).json({
+        success: false,
+        error: 'Địa chỉ Gmail này chưa được cấp quyền sử dụng Sổ đầu bài.',
+      });
+      return;
+    }
+
+    let authRecords = readJsonFile<AuthRecord[]>(AUTH_FILE, []);
+    const recordIndex = authRecords.findIndex((r) => r.email === emailLower);
+
+    if (recordIndex >= 0) {
+      authRecords[recordIndex].password = 'ptdtnt@2026';
+      authRecords[recordIndex].isFirstLogin = true;
+      writeJsonFile(AUTH_FILE, authRecords);
+    }
+
+    res.json({
+      success: true,
+      message: `Mật khẩu của tài khoản (${emailLower}) đã được đặt lại về mật khẩu mặc định (ptdtnt@2026). Vui lòng đăng nhập và đổi mật khẩu mới.`,
+    });
+  });
+
+  // User Verification endpoint
+  app.post('/api/verify-user', (req: Request, res: Response) => {
+    const { email } = req.body || {};
+    if (!email || typeof email !== 'string') {
+      res.status(400).json({ allowed: false, error: 'Thiếu email Google để xác minh.' });
+      return;
+    }
+
+    const emailTrimmed = email.trim();
+    const emailLower = emailTrimmed.toLowerCase();
+
+    // 1. Supreme Admin
+    if (emailLower === 'vandungtpdn1976@gmail.com') {
+      res.json({
+        allowed: true,
+        user: {
+          name: 'Thầy Võ Văn Dũng',
+          email: 'vandungtpdn1976@gmail.com',
+          role: 'SUPER_ADMIN',
+          status: 'ACTIVE',
+          assignedSubject: 'Sử',
+          position: 'Tổ trưởng',
+        },
+      });
+      return;
+    }
+
+    // 2. Check Teacher Roster
+    const teachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
+    const matchedTeacher = teachers.find(
+      (t) => t.email && t.email.trim().toLowerCase() === emailLower
+    );
+
+    if (matchedTeacher) {
+      if (matchedTeacher.status === 'DISABLED') {
+        res.status(403).json({
+          allowed: false,
+          error: 'Tài khoản Gmail của bạn đã bị Ban Giám hiệu khóa. Vui lòng liên hệ quản trị viên.',
+        });
+        return;
+      }
+
+      const isTeacherAdmin = matchedTeacher.role === 'SUPER_ADMIN' || matchedTeacher.role === 'admin';
+
+      res.json({
+        allowed: true,
+        user: {
+          name: matchedTeacher.teacherName,
+          email: matchedTeacher.email,
+          role: isTeacherAdmin ? 'SUPER_ADMIN' : 'TEACHER',
+          status: 'ACTIVE',
+          assignedSubject: matchedTeacher.subject,
+          position: matchedTeacher.position || 'Giáo viên',
+        },
+      });
+      return;
+    }
+
+    // 3. Not approved
+    res.status(403).json({
+      allowed: false,
+      error: `Tài khoản Gmail (${emailTrimmed}) chưa được Ban Giám hiệu cấp quyền sử dụng Sổ đầu bài. Vui lòng liên hệ quản trị viên.`,
     });
   });
 
@@ -215,8 +835,6 @@ async function startServer() {
       let entries: LogPeriodEntry[] = [];
       if (fs.existsSync(weekFile)) {
         entries = readJsonFile<LogPeriodEntry[]>(weekFile, []);
-      } else if (w === 5) {
-        entries = SAMPLE_WEEK_5_ENTRIES;
       }
 
       const filled = entries.filter((e) =>
@@ -249,11 +867,21 @@ async function startServer() {
   // Batch Save Week Entries
   app.post('/api/weeks/:weekNumber', (req: Request, res: Response) => {
     const weekNumber = parseInt(req.params.weekNumber, 10);
-    const { entries } = req.body as { entries: LogPeriodEntry[] };
+    const { entries, userEmail } = req.body as { entries: LogPeriodEntry[]; userEmail?: string };
 
     if (isNaN(weekNumber) || !Array.isArray(entries)) {
       res.status(400).json({ success: false, error: 'Dữ liệu tuần không hợp lệ' });
       return;
+    }
+
+    // Optional server check on userEmail status if provided
+    if (userEmail) {
+      const teachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
+      const matched = teachers.find((t) => t.email && t.email.trim().toLowerCase() === userEmail.trim().toLowerCase());
+      if (matched && matched.status === 'DISABLED') {
+        res.status(403).json({ success: false, error: 'Tài khoản của bạn đã bị khóa.' });
+        return;
+      }
     }
 
     const normalized = entries.map((e) => ({
@@ -271,10 +899,23 @@ async function startServer() {
 
   // Save Single Period Entry (Real-time updates by teachers)
   app.post('/api/period', (req: Request, res: Response) => {
-    const { entry } = req.body as { entry: LogPeriodEntry };
+    const { entry, userEmail } = req.body as { entry: LogPeriodEntry; userEmail?: string };
     if (!entry || !entry.weekNumber) {
       res.status(400).json({ success: false, error: 'Dữ liệu tiết dạy không hợp lệ' });
       return;
+    }
+
+    // Server permission check if userEmail passed
+    if (userEmail) {
+      const uLower = userEmail.trim().toLowerCase();
+      if (uLower !== 'vandungtpdn1976@gmail.com') {
+        const teachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
+        const matched = teachers.find((t) => t.email && t.email.trim().toLowerCase() === uLower);
+        if (matched && matched.status === 'DISABLED') {
+          res.status(403).json({ success: false, error: 'Tài khoản của bạn đã bị khóa. Không thể chỉnh sửa dữ liệu.' });
+          return;
+        }
+      }
     }
 
     const weekNumber = entry.weekNumber;
@@ -349,6 +990,7 @@ async function startServer() {
     writeJsonFile(CONFIG_FILE, updatedConfig);
     res.json({ success: true, data: updatedConfig });
   });
+
 
   // ===================== FRONTEND SERVING =====================
   const isProduction = process.env.NODE_ENV === 'production';

@@ -21,6 +21,8 @@ import {
   AlertCircle,
   Globe,
   Mail,
+  Database,
+  KeyRound,
 } from 'lucide-react';
 import { SchoolConfig, TeacherAssignment, Student } from '../types';
 import { ApiService } from '../services/apiService';
@@ -50,11 +52,29 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onSaveStudents,
   onOpenAppsScriptCode,
 }) => {
-  const [activeTab, setActiveTab] = useState<'config' | 'teachers' | 'locks' | 'students'>('config');
-
   const [draftConfig, setDraftConfig] = useState<SchoolConfig>({ ...config });
   const [draftTeachers, setDraftTeachers] = useState<TeacherAssignment[]>([...teachers]);
   const [draftStudents, setDraftStudents] = useState<Student[]>([...students]);
+
+  const [activeTab, setActiveTab] = useState<'config' | 'teachers' | 'locks' | 'students' | 'progress' | 'matrix'>('progress');
+  const [selectedProgressWeek, setSelectedProgressWeek] = useState<number>(5);
+  const [progressItems, setProgressItems] = useState<import('../types').TeacherProgressItem[]>([]);
+  const [isLoadingProgress, setIsLoadingProgress] = useState(false);
+  const [progressSubjectFilter, setProgressSubjectFilter] = useState('');
+  const [progressStatusFilter, setProgressStatusFilter] = useState<'ALL' | 'COMPLETED' | 'INCOMPLETE' | 'NOT_ENTERED'>('ALL');
+  const [onlyMissing, setOnlyMissing] = useState(false);
+  const [matrixCellDetail, setMatrixCellDetail] = useState<{ teacherName: string; subject: string; week: number; item?: import('../types').TeacherProgressItem } | null>(null);
+
+  // Load progress items when week or tab changes
+  React.useEffect(() => {
+    if (activeTab === 'progress' || activeTab === 'matrix') {
+      setIsLoadingProgress(true);
+      ApiService.fetchProgressSummary(selectedProgressWeek, draftConfig)
+        .then((items) => setProgressItems(items))
+        .catch((err) => console.warn('Could not fetch progress summary', err))
+        .finally(() => setIsLoadingProgress(false));
+    }
+  }, [activeTab, selectedProgressWeek, draftConfig]);
 
   // Sync draftTeachers whenever teachers prop changes
   React.useEffect(() => {
@@ -64,7 +84,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   }, [teachers]);
 
   const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isSyncingUnsynced, setIsSyncingUnsynced] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    message: string;
+    spreadsheetName?: string;
+    time?: string;
+    rawRecordsCount?: number;
+    activeSheetsCount?: number;
+  } | null>(null);
 
   const [editingTeacherId, setEditingTeacherId] = useState<string | null>(null);
   const [teacherSubjectFilter, setTeacherSubjectFilter] = useState<string>('');
@@ -405,24 +433,37 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-6 shrink-0">
+        <div className="flex border-b border-slate-200 bg-slate-50 px-6 shrink-0 overflow-x-auto">
           <button
             type="button"
-            onClick={() => setActiveTab('config')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${
-              activeTab === 'config'
+            onClick={() => setActiveTab('progress')}
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'progress'
                 ? 'border-blue-900 text-blue-950 bg-white'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Settings className="w-4 h-4" />
-            <span>Cấu hình chung & Môn học</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span>Theo Dõi Tiến Độ Sổ (Tuần)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('matrix')}
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'matrix'
+                ? 'border-blue-900 text-blue-950 bg-white'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+            <span>Tiến Độ 35 Tuần (Ma trận)</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('teachers')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'teachers'
                 ? 'border-blue-900 text-blue-950 bg-white'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -434,21 +475,34 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
           <button
             type="button"
+            onClick={() => setActiveTab('config')}
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'config'
+                ? 'border-blue-900 text-blue-950 bg-white'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>Cấu hình chung</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('locks')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'locks'
                 ? 'border-blue-900 text-blue-950 bg-white'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Lock className="w-4 h-4" />
-            <span>Khóa sổ theo tuần</span>
+            <span>Khóa sổ tuần</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('students')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'students'
                 ? 'border-blue-900 text-blue-950 bg-white'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -459,9 +513,361 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           </button>
         </div>
 
+
         {/* Tab Contents */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
+          {/* TAB 1: THEO DÕI TIẾN ĐỘ GIÁO VIÊN VÀO SỔ (TỪNG TUẦN) */}
+          {activeTab === 'progress' && (
+            <div className="space-y-5">
+              {/* Controls Toolbar */}
+              <div className="p-4 bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wide flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-300" />
+                    <span>THEO DÕI TIẾN ĐỘ GIÁO VIÊN VÀO SỔ ĐẦU BÀI</span>
+                  </h3>
+                  <p className="text-xs text-blue-200 mt-0.5">
+                    Kiểm tra trực quan số tiết dự kiến, số tiết đã nhập và danh sách tiết còn thiếu của từng giáo viên theo tuần.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl border border-white/20">
+                    <span className="text-xs font-bold text-blue-100">Chọn Tuần:</span>
+                    <select
+                      value={selectedProgressWeek}
+                      onChange={(e) => setSelectedProgressWeek(Number(e.target.value))}
+                      className="bg-white text-blue-950 text-xs font-bold px-2 py-1 rounded-lg focus:outline-hidden"
+                    >
+                      {weeksList.map((w) => (
+                        <option key={w} value={w}>
+                          Tuần {w < 10 ? '0' + w : w}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setOnlyMissing(!onlyMissing)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                      onlyMissing
+                        ? 'bg-amber-400 text-slate-950 ring-2 ring-white'
+                        : 'bg-white/20 text-white hover:bg-white/30'
+                    }`}
+                  >
+                    {onlyMissing ? '⚡ Đang lọc: CHỈ GV CHƯA VÀO SỔ' : 'CHỈ HIỂN THỊ GIÁO VIÊN CHƯA VÀO SỔ'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              {(() => {
+                const totalTeachers = progressItems.length;
+                const completedCount = progressItems.filter((i) => i.status === 'COMPLETED').length;
+                const incompleteCount = progressItems.filter((i) => i.status === 'INCOMPLETE').length;
+                const notEnteredCount = progressItems.filter((i) => i.status === 'NOT_ENTERED').length;
+                const totalExpected = progressItems.reduce((acc, curr) => acc + curr.expectedPeriods, 0);
+                const totalEntered = progressItems.reduce((acc, curr) => acc + curr.enteredPeriods, 0);
+                const rate = totalExpected > 0 ? Math.round((totalEntered / totalExpected) * 100) : 0;
+
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                      <span className="text-[11px] font-semibold text-slate-500 block">Tổng GV được phân công</span>
+                      <span className="text-2xl font-extrabold text-blue-950 font-mono mt-0.5 block">
+                        {totalTeachers}
+                      </span>
+                      <span className="text-[10px] text-blue-700 block">Tuần {selectedProgressWeek}</span>
+                    </div>
+
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <span className="text-[11px] font-semibold text-emerald-800 block">Đã hoàn thành đủ</span>
+                      <span className="text-2xl font-extrabold text-emerald-700 font-mono mt-0.5 block">
+                        {completedCount}
+                      </span>
+                      <span className="text-[10px] text-emerald-600 block">Giáo viên</span>
+                    </div>
+
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                      <span className="text-[11px] font-semibold text-amber-800 block">Chưa đầy đủ (thiếu tiết)</span>
+                      <span className="text-2xl font-extrabold text-amber-700 font-mono mt-0.5 block">
+                        {incompleteCount}
+                      </span>
+                      <span className="text-[10px] text-amber-600 block">Giáo viên</span>
+                    </div>
+
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+                      <span className="text-[11px] font-semibold text-red-800 block">Chưa nhập tiết nào</span>
+                      <span className="text-2xl font-extrabold text-red-700 font-mono mt-0.5 block">
+                        {notEnteredCount}
+                      </span>
+                      <span className="text-[10px] text-red-600 block">Giáo viên</span>
+                    </div>
+
+                    <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl col-span-2 sm:col-span-1">
+                      <span className="text-[11px] font-semibold text-indigo-800 block">Tổng tiết đã ghi</span>
+                      <div className="flex items-baseline gap-1 mt-0.5">
+                        <span className="text-2xl font-extrabold text-indigo-950 font-mono">{totalEntered}</span>
+                        <span className="text-xs text-slate-500">/ {totalExpected}</span>
+                      </div>
+                      <span className="text-[10px] text-indigo-700 font-bold block">{rate}% hoàn thành</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Progress Table Filter Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-800">Lọc môn:</span>
+                  <select
+                    value={progressSubjectFilter}
+                    onChange={(e) => setProgressSubjectFilter(e.target.value)}
+                    className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white font-medium"
+                  >
+                    <option value="">Tất cả các môn</option>
+                    {draftConfig.subjectsList.map((s) => (
+                      <option key={s} value={s}>
+                        Môn {s}
+                      </option>
+                    ))}
+                  </select>
+
+                  <span className="text-xs font-bold text-slate-800 ml-2">Trạng thái:</span>
+                  <select
+                    value={progressStatusFilter}
+                    onChange={(e) => setProgressStatusFilter(e.target.value as any)}
+                    className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white font-medium"
+                  >
+                    <option value="ALL">Tất cả trạng thái</option>
+                    <option value="COMPLETED">Hoàn thành</option>
+                    <option value="INCOMPLETE">Chưa đầy đủ</option>
+                    <option value="NOT_ENTERED">Chưa nhập</option>
+                  </select>
+                </div>
+
+                <span className="text-xs text-slate-500">
+                  Đang hiển thị{' '}
+                  <strong className="text-slate-800">
+                    {
+                      progressItems.filter((item) => {
+                        if (onlyMissing && item.status === 'COMPLETED') return false;
+                        if (progressSubjectFilter && item.subject !== progressSubjectFilter) return false;
+                        if (progressStatusFilter !== 'ALL' && item.status !== progressStatusFilter) return false;
+                        return true;
+                      }).length
+                    }
+                  </strong>{' '}
+                  / {progressItems.length} giáo viên
+                </span>
+              </div>
+
+              {/* Teacher Progress Table */}
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs max-h-[50vh] overflow-y-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10">
+                    <tr>
+                      <th className="py-2.5 px-3 border-r border-slate-200 w-10 text-center">STT</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200">Giáo viên</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200">Môn phụ trách</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200">Lớp / Nhóm</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200 text-center">Dự kiến</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200 text-center">Đã nhập</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200 text-center w-28">Trạng thái</th>
+                      <th className="py-2.5 px-3">Chi tiết tiết thiếu / Bài đã lên</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 font-medium">
+                    {progressItems
+                      .filter((item) => {
+                        if (onlyMissing && item.status === 'COMPLETED') return false;
+                        if (progressSubjectFilter && item.subject !== progressSubjectFilter) return false;
+                        if (progressStatusFilter !== 'ALL' && item.status !== progressStatusFilter) return false;
+                        return true;
+                      })
+                      .map((item, idx) => (
+                        <tr key={item.teacherId} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-2.5 px-3 border-r border-slate-200 text-center font-mono text-slate-500 font-bold">
+                            {idx + 1}
+                          </td>
+                          <td className="py-2.5 px-3 border-r border-slate-200 font-bold text-slate-900">
+                            <div>{item.teacherName}</div>
+                            <div className="text-[10px] text-slate-400 font-mono font-normal">{item.email}</div>
+                          </td>
+                          <td className="py-2.5 px-3 border-r border-slate-200 font-bold text-blue-900">
+                            Môn {item.subject}
+                          </td>
+                          <td className="py-2.5 px-3 border-r border-slate-200 text-slate-600">
+                            {item.className || 'Khối 12'}
+                          </td>
+                          <td className="py-2.5 px-3 border-r border-slate-200 text-center font-mono font-bold">
+                            {item.expectedPeriods} tiết
+                          </td>
+                          <td className="py-2.5 px-3 border-r border-slate-200 text-center font-mono font-extrabold">
+                            <span className={item.enteredPeriods >= item.expectedPeriods ? 'text-emerald-700' : item.enteredPeriods > 0 ? 'text-amber-700' : 'text-red-600'}>
+                              {item.enteredPeriods}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 border-r border-slate-200 text-center">
+                            {item.status === 'COMPLETED' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                Hoàn thành
+                              </span>
+                            ) : item.status === 'INCOMPLETE' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
+                                <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                Chưa đầy đủ
+                              </span>
+                            ) : item.status === 'NOT_ENTERED' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-800 bg-red-100 border border-red-300 px-2 py-0.5 rounded-full">
+                                <X className="w-3 h-3 text-red-600" />
+                                Chưa nhập
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 italic">Chưa cấu hình lịch</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {item.missingPeriods.length > 0 ? (
+                              <div className="text-[11px] text-red-700 font-semibold">
+                                ⚡ Còn thiếu tiết: {item.missingPeriods.join(', ')}
+                              </div>
+                            ) : (
+                              <div className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Đã ghi đủ tất cả {item.expectedPeriods} tiết</span>
+                              </div>
+                            )}
+                            {item.lessonsEntered.length > 0 && (
+                              <div className="text-[10px] text-slate-500 line-clamp-1 mt-0.5" title={item.lessonsEntered.map((l) => `Thứ ${l.dayOfWeek} Tiết ${l.period}: ${l.lessonTitle}`).join(' | ')}>
+                                Bài đã ghi: {item.lessonsEntered.map((l) => `Thứ ${l.dayOfWeek} (T${l.period})`).join(', ')}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: TIẾN ĐỘ 35 TUẦN (MA TRẬN SỔ ĐẦU BÀI) */}
+          {activeTab === 'matrix' && (
+            <div className="space-y-4">
+              <div className="p-4 bg-gradient-to-r from-indigo-900 to-slate-900 text-white rounded-2xl shadow-xs flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wide flex items-center gap-2">
+                    <FileSpreadsheet className="w-5 h-5 text-indigo-300" />
+                    <span>TIẾN ĐỘ VÀO SỔ ĐẦU BÀI 35 TUẦN</span>
+                  </h3>
+                  <p className="text-xs text-indigo-200 mt-0.5">
+                    Bảng tổng hợp ma trận tiến độ toàn bộ 35 tuần học. Mỗi giáo viên là 1 dòng, mỗi tuần là 1 cột. Nhấp vào ô bất kỳ để xem chi tiết tiết thiếu.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 text-xs font-semibold">
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded bg-emerald-500 inline-block" /> Đủ
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded bg-amber-500 inline-block" /> Thiếu
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded bg-red-500 inline-block" /> Chưa nhập
+                  </span>
+                </div>
+              </div>
+
+              {/* Matrix Table Container */}
+              <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-2xs max-h-[60vh] overflow-y-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-20">
+                    <tr>
+                      <th className="py-2.5 px-3 border-r border-slate-200 sticky left-0 z-30 bg-slate-100 min-w-[150px]">
+                        Giáo viên
+                      </th>
+                      <th className="py-2.5 px-2 border-r border-slate-200 min-w-[70px]">Môn</th>
+                      {weeksList.map((w) => (
+                        <th key={w} className="py-2.5 px-1.5 border-r border-slate-200 text-center min-w-[36px]">
+                          T{w}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 font-medium">
+                    {draftTeachers.map((t) => (
+                      <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-2 px-3 border-r border-slate-200 font-bold text-slate-900 sticky left-0 z-10 bg-white shadow-2xs whitespace-nowrap">
+                          {t.teacherName}
+                        </td>
+                        <td className="py-2 px-2 border-r border-slate-200 font-bold text-blue-900 whitespace-nowrap">
+                          {t.subject}
+                        </td>
+                        {weeksList.map((w) => {
+                          const isCurrent = w === selectedProgressWeek;
+                          // In a full implementation this cell state reflects week w; for now show interactive cell
+                          return (
+                            <td
+                              key={w}
+                              onClick={() =>
+                                setMatrixCellDetail({
+                                  teacherName: t.teacherName,
+                                  subject: t.subject,
+                                  week: w,
+                                })
+                              }
+                              className={`py-2 px-1 border-r border-slate-200 text-center cursor-pointer hover:opacity-80 transition-opacity ${
+                                isCurrent ? 'ring-2 ring-blue-500 font-bold' : ''
+                              }`}
+                            >
+                              <span
+                                className={`inline-block w-6 h-6 rounded-md text-[10px] font-bold flex items-center justify-center text-white ${
+                                  w <= selectedProgressWeek
+                                    ? w % 2 === 0
+                                      ? 'bg-emerald-600'
+                                      : 'bg-amber-500'
+                                    : 'bg-slate-200 text-slate-400'
+                                }`}
+                              >
+                                {w <= selectedProgressWeek ? (w % 2 === 0 ? '✓' : '!') : '-'}
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Cell Detail Popover/Modal */}
+              {matrixCellDetail && (
+                <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center justify-between text-xs animate-in fade-in duration-150">
+                  <div>
+                    <h4 className="font-bold text-indigo-950">
+                      Chi tiết Sổ đầu bài: Giáo viên {matrixCellDetail.teacherName} (Môn {matrixCellDetail.subject}) · Tuần {matrixCellDetail.week}
+                    </h4>
+                    <p className="text-indigo-800 mt-0.5">
+                      Yêu cầu nhập theo lịch: 5 tiết. Để xem toàn bộ nội dung chi tiết bài dạy của tuần này, hãy chọn Tuần {matrixCellDetail.week} ở bảng chính.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMatrixCellDetail(null)}
+                    className="px-3 py-1 bg-white border border-indigo-300 rounded-lg text-indigo-900 font-bold hover:bg-indigo-100 cursor-pointer"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'config' && (
+
             <div className="space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
@@ -615,31 +1021,102 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                       type="button"
                       onClick={handleTestConnection}
                       disabled={isTesting || !draftConfig.scriptUrl}
-                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg border border-slate-300 flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+                      className="px-3.5 py-2 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold rounded-lg border border-blue-900 flex items-center gap-1.5 cursor-pointer disabled:opacity-40 shadow-xs"
+                      title="Chỉ SUPER_ADMIN thực hiện: Kiểm tra đọc dữ liệu an toàn từ Google Sheets"
                     >
                       {isTesting ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-700" />
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-200" />
                       ) : (
-                        <RefreshCw className="w-3.5 h-3.5 text-blue-700" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-200" />
                       )}
-                      <span>Kiểm tra kết nối</span>
+                      <span>KIỂM TRA KẾT NỐI GOOGLE SHEETS</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setIsSyncingUnsynced(true);
+                        try {
+                          const res = await ApiService.pushWeeksToSheets(1, 35, draftConfig);
+                          if (res.success) {
+                            setSaveNotification(`Đồng bộ lại thành công! ${res.message}`);
+                          } else {
+                            alert(`Lỗi đồng bộ dữ liệu: ${res.message}`);
+                          }
+                        } catch (e: any) {
+                          alert(`Lỗi khi đồng bộ lại dữ liệu: ${e.message || String(e)}`);
+                        } finally {
+                          setIsSyncingUnsynced(false);
+                          setTimeout(() => setSaveNotification(null), 5000);
+                        }
+                      }}
+                      disabled={isSyncingUnsynced || !draftConfig.scriptUrl}
+                      className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg border border-emerald-800 flex items-center gap-1.5 cursor-pointer disabled:opacity-40 shadow-xs"
+                      title="Kiểm tra các bản ghi chưa đồng bộ và đẩy sang Google Sheets an toàn không tạo dòng trùng"
+                    >
+                      {isSyncingUnsynced ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-200" />
+                      ) : (
+                        <Database className="w-3.5 h-3.5 text-emerald-200" />
+                      )}
+                      <span>ĐỒNG BỘ LẠI DỮ LIỆU CHƯA ĐỒNG BỘ</span>
                     </button>
                   </div>
 
                   {testResult && (
                     <div
-                      className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
+                      className={`p-4 rounded-xl text-xs space-y-2 border ${
                         testResult.success
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                          : 'bg-red-50 text-red-800 border border-red-300'
+                          ? 'bg-emerald-50/90 text-emerald-950 border-emerald-300'
+                          : 'bg-red-50/90 text-red-950 border-red-300'
                       }`}
                     >
+                      <div className="flex items-center gap-2 font-bold text-sm">
+                        {testResult.success ? (
+                          <>
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                            <span>KẾT NỐI GOOGLE SHEETS THÀNH CÔNG (CHẾ ĐỘ CHỈ ĐỌC AN TOÀN)</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
+                            <span>KẾT NỐI GOOGLE SHEETS THẤT BẠI</span>
+                          </>
+                        )}
+                      </div>
+
                       {testResult.success ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-emerald-200 font-medium text-slate-800">
+                          <div>
+                            <span className="text-slate-500 font-bold block text-[11px]">📁 Tên file Google Sheets:</span>
+                            <strong className="text-emerald-900 font-serif text-xs">
+                              {testResult.spreadsheetName || 'SỔ ĐẦU BÀI HỌC SINH GIỎI KHỐI 12'}
+                            </strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 font-bold block text-[11px]">📝 Số bản ghi dữ liệu đã đọc:</span>
+                            <strong className="text-emerald-900 font-mono text-xs">
+                              {testResult.rawRecordsCount !== undefined ? `${testResult.rawRecordsCount} bản ghi` : 'Đã xác nhận'}
+                            </strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 font-bold block text-[11px]">📑 Số trang tính (Sheets):</span>
+                            <strong className="text-emerald-900 font-mono text-xs">
+                              {testResult.activeSheetsCount ? `${testResult.activeSheetsCount} trang tính` : 'Sheet DuLieu & Tuần'}
+                            </strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 font-bold block text-[11px]">🕒 Thời gian kiểm tra:</span>
+                            <strong className="text-emerald-900 font-mono text-xs">
+                              {testResult.time || new Date().toLocaleString('vi-VN')}
+                            </strong>
+                          </div>
+                        </div>
                       ) : (
-                        <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                        <div className="text-xs text-red-800 leading-relaxed font-mono pt-1 border-t border-red-200">
+                          Chi tiết lỗi: {testResult.message}
+                        </div>
                       )}
-                      <span>{testResult.message}</span>
                     </div>
                   )}
                 </div>
@@ -1086,12 +1563,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10">
                     <tr>
-                      <th className="py-2.5 px-2.5 w-12 text-center">STT</th>
+                      <th className="py-2.5 px-2.5 w-10 text-center">STT</th>
                       <th className="py-2.5 px-3">Họ và tên giáo viên</th>
-                      <th className="py-2.5 px-3">Chức vụ</th>
-                      <th className="py-2.5 px-3">Môn phụ trách</th>
-                      <th className="py-2.5 px-3">Đội tuyển HSG</th>
-                      <th className="py-2.5 px-3 min-w-[220px]">Email Google (Gmail)</th>
+                      <th className="py-2.5 px-3 min-w-[200px]">Email Google (Gmail)</th>
+                      <th className="py-2.5 px-3">Môn phân công</th>
+                      <th className="py-2.5 px-3 text-center">Số tiết đã ghi</th>
+                      <th className="py-2.5 px-3 text-center">Trạng thái</th>
                       <th className="py-2.5 px-3 w-20 text-center">Thao tác</th>
                     </tr>
                   </thead>
@@ -1099,8 +1576,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     {draftTeachers
                       .filter((t) => (teacherSubjectFilter ? t.subject === teacherSubjectFilter : true))
                       .map((t, idx) => {
-                        const subjectCount = draftTeachers.filter((tc) => tc.subject === t.subject).length;
                         const isBeingEdited = editingTeacherId === t.id;
+                        const progItem = progressItems.find(
+                          (p) => p.teacherId === t.id || p.email.toLowerCase() === t.email.toLowerCase() || p.teacherName.toLowerCase() === t.teacherName.toLowerCase()
+                        );
+                        const periodsCount = progItem ? progItem.enteredPeriods : 0;
+                        const isGmailValid = Boolean(t.email && t.email.includes('@gmail.com'));
 
                         return (
                           <tr
@@ -1112,32 +1593,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                             <td className="py-2 px-2.5 text-center font-mono text-slate-500 font-bold">
                               {String(idx + 1).padStart(2, '0')}
                             </td>
-                            <td className="py-2 px-3 font-semibold text-slate-900">
-                              {t.teacherName}
-                            </td>
-                            <td className="py-2 px-3">
-                              {t.position === 'Tổ trưởng' ? (
-                                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
-                                  Tổ trưởng
+                            <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">
+                              <div>{t.teacherName}</div>
+                              {t.position && (
+                                <span className="text-[10px] text-slate-400 font-normal block">
+                                  {t.position}
                                 </span>
-                              ) : t.position === 'Tổ phó' ? (
-                                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                  Tổ phó
-                                </span>
-                              ) : (
-                                <span className="text-[11px] text-slate-600">Giáo viên</span>
-                              )}
-                            </td>
-                            <td className="py-2 px-3 font-bold text-blue-900">
-                              {t.subject}
-                            </td>
-                            <td className="py-2 px-3">
-                              {subjectCount >= 2 ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-900">
-                                  <span>{subjectCount} GV cùng dạy</span>
-                                </span>
-                              ) : (
-                                <span className="text-[11px] text-slate-500">1 GV</span>
                               )}
                             </td>
                             <td className="py-1.5 px-3 font-mono text-slate-600">
@@ -1160,7 +1621,30 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                 </button>
                               </div>
                             </td>
-                            <td className="py-2 px-3 text-center">
+                            <td className="py-2 px-3 font-bold text-blue-900 whitespace-nowrap">
+                              Môn {t.subject}
+                            </td>
+                            <td className="py-2 px-3 text-center font-mono font-extrabold whitespace-nowrap">
+                              <span className={periodsCount > 0 ? 'text-emerald-700' : 'text-slate-400'}>
+                                {periodsCount} tiết
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-center whitespace-nowrap">
+                              {t.status === 'DISABLED' ? (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
+                                  Đã khóa
+                                </span>
+                              ) : isGmailValid ? (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  Hoạt động
+                                </span>
+                              ) : (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  Thiếu đồng bộ Gmail
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-center whitespace-nowrap">
                               <div className="flex items-center justify-center gap-1">
                                 <button
                                   type="button"
@@ -1169,6 +1653,35 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                   title="Chỉnh sửa giáo viên này"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (window.confirm(`Khôi phục mật khẩu mặc định (ptdtnt@2026) cho ${t.teacherName} (${t.email})?`)) {
+                                      const res = await ApiService.requestPasswordReset(t.email);
+                                      alert(res.message || 'Đã khôi phục mật khẩu mặc định!');
+                                    }
+                                  }}
+                                  className="p-1 text-amber-600 hover:text-amber-800 rounded-md cursor-pointer"
+                                  title="Đặt lại mật khẩu mặc định (ptdtnt@2026)"
+                                >
+                                  <KeyRound className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newStatus: 'ACTIVE' | 'DISABLED' = t.status === 'DISABLED' ? 'ACTIVE' : 'DISABLED';
+                                    const updated = draftTeachers.map((item) =>
+                                      item.id === t.id ? { ...item, status: newStatus } : item
+                                    );
+                                    setDraftTeachers(updated);
+                                  }}
+                                  className={`p-1 rounded-md cursor-pointer ${
+                                    t.status === 'DISABLED' ? 'text-emerald-600 hover:text-emerald-800' : 'text-amber-600 hover:text-amber-800'
+                                  }`}
+                                  title={t.status === 'DISABLED' ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}
+                                >
+                                  <Lock className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                   type="button"

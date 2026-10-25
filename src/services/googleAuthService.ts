@@ -56,13 +56,19 @@ export const googleSignIn = async (): Promise<{
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Không thể lấy mã truy cập Google OAuth từ Firebase.');
-    }
 
-    cachedAccessToken = credential.accessToken;
+    cachedAccessToken = credential?.accessToken || '';
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
+    if (
+      error?.code === 'auth/popup-closed-by-user' ||
+      error?.code === 'auth/cancelled-popup-request' ||
+      error?.message?.includes('popup-closed-by-user') ||
+      error?.message?.includes('cancelled-popup-request')
+    ) {
+      console.log('Cửa sổ đăng nhập Google đã được người dùng đóng.');
+      return null;
+    }
     console.error('Google Sign-in error:', error);
     throw error;
   } finally {

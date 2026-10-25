@@ -1,0 +1,178 @@
+[
+  {
+    "id": "gv_01",
+    "teacherName": "Nguyễn Anh Tuấn",
+    "position": "Tổ phó",
+    "subject": "Toán",
+    "email": "totoancvabd@gmail.com",
+    "phone": "0905123001"
+  },
+  {
+    "id": "gv_02",
+    "teacherName": "Nguyễn Thị Thúy",
+    "position": "Giáo viên",
+    "subject": "Toán",
+    "email": "thuycuong111107@gmail.com",
+    "phone": "0905123002"
+  },
+  {
+    "id": "gv_03",
+    "teacherName": "Vũ Thanh Thủy",
+    "position": "Tổ trưởng",
+    "subject": "Lí",
+    "email": "thuymy.vu@gmail.com",
+    "phone": "0905123003"
+  },
+  {
+    "id": "gv_04",
+    "teacherName": "Võ Tấn Hùng",
+    "position": "Giáo viên",
+    "subject": "Lí",
+    "email": "vthung1308@gmail.com",
+    "phone": "0905123004"
+  },
+  {
+    "id": "gv_05",
+    "teacherName": "Lý Xuân Trưng",
+    "position": "Giáo viên",
+    "subject": "Lí",
+    "email": "xuantrungly78@gmail.com",
+    "phone": "0905123005"
+  },
+  {
+    "id": "gv_06",
+    "teacherName": "Nguyễn Thị Giang",
+    "position": "Giáo viên",
+    "subject": "Tin học",
+    "email": "giang160677dtntbp@gmail.com",
+    "phone": "0905123006"
+  },
+  {
+    "id": "gv_07",
+    "teacherName": "Lê Thị Mỹ Anh",
+    "position": "Giáo viên",
+    "subject": "Tin học",
+    "email": "anh.blue.86@gmail.com",
+    "phone": "0905123007"
+  },
+  {
+    "id": "gv_08",
+    "teacherName": "Nguyễn Huy Hoàng",
+    "position": "Tổ trưởng",
+    "subject": "Hóa",
+    "email": "nguyenhuyhoang171079@gmail.com",
+    "phone": "0905123008"
+  },
+  {
+    "id": "gv_09",
+    "teacherName": "Đỗ Thị Thu Phương",
+    "position": "Giáo viên",
+    "subject": "Hóa",
+    "email": "thuphuong.dtntbp@gmail.com",
+    "phone": "0905123009"
+  },
+  {
+    "id": "gv_10",
+    "teacherName": "Hà Thị Thúy Hằng",
+    "position": "Giáo viên",
+    "subject": "Hóa",
+    "email": "hanghoak7@gmail.com",
+    "phone": "0905123010"
+  },
+  {
+    "id": "gv_11",
+    "teacherName": "Đàm Thị Vân",
+    "position": "Giáo viên",
+    "subject": "Sinh",
+    "email": "damvanhungvuong@gmail.com",
+    "phone": "0905123011"
+  },
+  {
+    "id": "gv_12",
+    "teacherName": "Huỳnh T.Tư Em",
+    "position": "Giáo viên",
+    "subject": "Ngữ văn",
+    "email": "em.htt@gmail.com",
+    "phone": "0905123012"
+  },
+  {
+    "id": "gv_13",
+    "teacherName": "Trần Thị Thanh Hà",
+    "position": "Tổ phó",
+    "subject": "Ngữ văn",
+    "email": "ha.ttt@gmail.com",
+    "phone": "0905123013"
+  },
+  {
+    "id": "gv_14",
+    "teacherName": "Vũ Minh Hằng",
+    "position": "Tổ trưởng",
+    "subject": "Anh",
+    "email": "vuminhhang2803@gmail.com",
+    "phone": "0905123014"
+  },
+  {
+    "id": "gv_15",
+    "teacherName": "Nguyễn Thị Bích Thuận",
+    "position": "Giáo viên",
+    "subject": "Anh",
+    "email": "nguyentbichthuan@gmail.com",
+    "phone": "0905123015"
+  },
+  {
+    "id": "gv_16",
+    "teacherName": "Bùi Thị Nhiệm",
+    "position": "Giáo viên",
+    "subject": "Anh",
+    "email": "nhiembuinew2dxbp@gmail.com",
+    "phone": "0905123016"
+  },
+  {
+    "id": "gv_17",
+    "teacherName": "Võ Văn Dũng",
+    "position": "Tổ trưởng",
+    "subject": "Sử",
+    "email": "vandungtpdn1976@gmail.com",
+    "phone": "0905890123"
+  },
+  {
+    "id": "gv_18",
+    "teacherName": "Hồ Thị Bắc",
+    "position": "Giáo viên",
+    "subject": "Sử",
+    "email": "hobacbp@gmail.com",
+    "phone": "0905890444"
+  },
+  {
+    "id": "gv_19",
+    "teacherName": "Mai Thị Quỳ",
+    "position": "Giáo viên",
+    "subject": "Địa lí",
+    "email": "quythuan80@gmail.com",
+    "phone": "0905901234"
+  },
+  {
+    "id": "gv_20",
+    "teacherName": "Lục Hữu Bằng",
+    "position": "Giáo viên",
+    "subject": "Địa lí",
+    "email": "bang.lh@gmail.com",
+    "phone": "0905901555"
+  },
+  {
+    "id": "gv_21",
+    "teacherName": "Hà Thị Thanh Huyền",
+    "position": "Giáo viên",
+    "subject": "GDKTPL",
+    "email": "huyen.htt@gmail.com",
+    "phone": "0912123789"
+  },
+  {
+    "id": "gv_22",
+    "teacherName": "Trần Quốc Bảo",
+    "position": "Giáo viên",
+    "subject": "Công nghệ",
+    "email": "minhanhminh8790@gmail.com",
+    "phone": "0905901888"
+  }
+]

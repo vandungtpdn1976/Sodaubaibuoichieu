@@ -12,8 +12,9 @@ import {
   Zap,
   Download,
   Calendar,
+  Users,
 } from 'lucide-react';
-import { SchoolConfig, CurrentUser } from '../types';
+import { SchoolConfig, CurrentUser, TeacherAssignment } from '../types';
 
 interface WeekToolbarProps {
   currentWeek: number;
@@ -26,6 +27,9 @@ interface WeekToolbarProps {
   currentUser: CurrentUser;
   selectedSubjectFilter: string;
   onSelectSubjectFilter: (subj: string) => void;
+  teachers?: TeacherAssignment[];
+  selectedTeacherFilter?: string;
+  onSelectTeacherFilter?: (teacher: string) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onOpenQuickEntry: () => void;
@@ -34,6 +38,8 @@ interface WeekToolbarProps {
   onExportWeekExcel: () => void;
   onExportSemesterExcel: () => void;
   onOpenAllWeeksOverview?: () => void;
+  onSyncFromSheets?: () => void;
+  onPushWeeks1To7?: () => void;
 }
 
 export const WeekToolbar: React.FC<WeekToolbarProps> = ({
@@ -47,6 +53,9 @@ export const WeekToolbar: React.FC<WeekToolbarProps> = ({
   currentUser,
   selectedSubjectFilter,
   onSelectSubjectFilter,
+  teachers = [],
+  selectedTeacherFilter = '',
+  onSelectTeacherFilter,
   searchQuery,
   onSearchChange,
   onOpenQuickEntry,
@@ -55,6 +64,8 @@ export const WeekToolbar: React.FC<WeekToolbarProps> = ({
   onExportWeekExcel,
   onExportSemesterExcel,
   onOpenAllWeeksOverview,
+  onSyncFromSheets,
+  onPushWeeks1To7,
 }) => {
   const weeksList = Array.from({ length: 35 }, (_, i) => i + 1);
 
@@ -158,7 +169,7 @@ export const WeekToolbar: React.FC<WeekToolbarProps> = ({
             )}
           </div>
 
-          {/* Action Buttons: Nhập nhanh, Excel, Print */}
+          {/* Action Buttons: Nhập nhanh, Đồng bộ, Lưu Tuần 1-7, Excel, Print */}
           <div className="flex items-center gap-2 flex-wrap">
             {/* Quick Batch Entry button */}
             {!isLocked && (
@@ -170,6 +181,45 @@ export const WeekToolbar: React.FC<WeekToolbarProps> = ({
               >
                 <Zap className="w-4 h-4 text-amber-200" />
                 <span>Nhập nhanh</span>
+              </button>
+            )}
+
+            {/* Button Push Weeks 1 to 7 to Google Sheets */}
+            {onPushWeeks1To7 && (
+              <button
+                type="button"
+                onClick={onPushWeeks1To7}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-extrabold text-white bg-emerald-700 hover:bg-emerald-600 rounded-lg shadow-2xs transition-all cursor-pointer ring-1 ring-emerald-500"
+                title="Bấm để lưu toàn bộ dữ liệu giáo viên nhập từ Tuần 1 đến Tuần 7 sang Google Sheet"
+              >
+                <span>📊</span>
+                <span>Lưu Tuần 1 - 7 sang Google Sheet</span>
+              </button>
+            )}
+
+            {/* Sync from Google Sheets button */}
+            {onSyncFromSheets && (
+              <button
+                type="button"
+                onClick={onSyncFromSheets}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                title="Đồng bộ lấy toàn bộ dữ liệu mới nhất từ Google Sheets theo link đã kết nối"
+              >
+                <span className="text-blue-700">🔄</span>
+                <span>Lấy dữ liệu từ Sheets</span>
+              </button>
+            )}
+
+            {/* Push Weeks 1 to 7 to Google Sheets */}
+            {onPushWeeks1To7 && (
+              <button
+                type="button"
+                onClick={onPushWeeks1To7}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                title="Lưu và đẩy đồng loạt toàn bộ dữ liệu từ Tuần 1 đến Tuần 7 của tất cả môn học sang Google Sheets"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-800" />
+                <span>Đẩy Tuần 1 - 7 sang Sheets</span>
               </button>
             )}
 
@@ -241,21 +291,75 @@ export const WeekToolbar: React.FC<WeekToolbarProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs text-slate-600">
-            <Filter className="w-3.5 h-3.5 text-slate-500" />
-            <span className="font-medium">Lọc môn:</span>
-            <select
-              value={selectedSubjectFilter}
-              onChange={(e) => onSelectSubjectFilter(e.target.value)}
-              className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:outline-hidden"
-            >
-              <option value="">Tất cả các môn</option>
-              {config.subjectsList.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Teacher Filter */}
+            {onSelectTeacherFilter && (
+              <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                <Users className="w-3.5 h-3.5 text-blue-700" />
+                <span className="font-medium">Giáo viên:</span>
+                <select
+                  value={selectedTeacherFilter}
+                  onChange={(e) => onSelectTeacherFilter(e.target.value)}
+                  className={`px-2.5 py-1 border rounded-lg text-xs font-semibold focus:outline-hidden cursor-pointer ${
+                    selectedTeacherFilter
+                      ? 'bg-blue-50 border-blue-400 text-blue-900 ring-1 ring-blue-300'
+                      : 'bg-white border-slate-300 text-slate-800'
+                  }`}
+                >
+                  <option value="">Tất cả giáo viên (Toàn trường)</option>
+                  {currentUser.email.toLowerCase() === 'vandungtpdn1976@gmail.com' && (
+                    <option value="my_periods">⭐ Tiết của tôi (Thầy Võ Văn Dũng - Môn Sử)</option>
+                  )}
+                  {teachers.map((t) => (
+                    <option key={t.id} value={t.teacherName}>
+                      {t.teacherName} ({t.subject})
+                    </option>
+                  ))}
+                </select>
+                {selectedTeacherFilter && (
+                  <button
+                    type="button"
+                    onClick={() => onSelectTeacherFilter('')}
+                    title="Bỏ lọc giáo viên, xem tất cả"
+                    className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
+                  >
+                    ✕ Hiện tất cả
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Subject Filter */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <Filter className="w-3.5 h-3.5 text-slate-500" />
+              <span className="font-medium">Lọc môn:</span>
+              <select
+                value={selectedSubjectFilter}
+                onChange={(e) => onSelectSubjectFilter(e.target.value)}
+                className={`px-2.5 py-1 border rounded-lg text-xs font-medium focus:outline-hidden cursor-pointer ${
+                  selectedSubjectFilter
+                    ? 'bg-amber-50 border-amber-400 text-amber-900 ring-1 ring-amber-300'
+                    : 'bg-white border-slate-300 text-slate-800'
+                }`}
+              >
+                <option value="">Tất cả các môn</option>
+                {config.subjectsList.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              {selectedSubjectFilter && (
+                <button
+                  type="button"
+                  onClick={() => onSelectSubjectFilter('')}
+                  title="Bỏ lọc môn"
+                  className="text-[11px] font-bold text-amber-700 hover:text-amber-900 underline cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

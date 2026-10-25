@@ -1,0 +1,80 @@
+[
+  {
+    "id": "s01",
+    "name": "Nguyễn Bảo An",
+    "subjectTeam": "Toán",
+    "className": "12 Toán"
+  },
+  {
+    "id": "s02",
+    "name": "Trần Quang Dũng",
+    "subjectTeam": "Toán",
+    "className": "12 Toán"
+  },
+  {
+    "id": "s03",
+    "name": "Vũ Minh Khôi",
+    "subjectTeam": "Lí",
+    "className": "12 Lí"
+  },
+  {
+    "id": "s04",
+    "name": "Đặng Thảo Vy",
+    "subjectTeam": "Lí",
+    "className": "12 Lí"
+  },
+  {
+    "id": "s05",
+    "name": "Trần Quốc Anh",
+    "subjectTeam": "Hóa",
+    "className": "12 Hóa"
+  },
+  {
+    "id": "s06",
+    "name": "Ngô Thanh Hà",
+    "subjectTeam": "Hóa",
+    "className": "12 Hóa"
+  },
+  {
+    "id": "s07",
+    "name": "Bùi Gia Huy",
+    "subjectTeam": "Sinh",
+    "className": "12 Sinh"
+  },
+  {
+    "id": "s08",
+    "name": "Đinh Tuấn Kiệt",
+    "subjectTeam": "Tin học",
+    "className": "12 Tin"
+  },
+  {
+    "id": "s09",
+    "name": "Hoàng Mai Chi",
+    "subjectTeam": "Anh",
+    "className": "12 Anh"
+  },
+  {
+    "id": "s10",
+    "name": "Nguyễn Thục Uyên",
+    "subjectTeam": "Ngữ văn",
+    "className": "12 Văn"
+  },
+  {
+    "id": "s11",
+    "name": "Lê Đình Toàn",
+    "subjectTeam": "Sử",
+    "className": "12 Sử"
+  },
+  {
+    "id": "s12",
+    "name": "Phạm Ngọc Trâm",
+    "subjectTeam": "Địa lí",
+    "className": "12 Địa"
+  },
+  {
+    "id": "s13",
+    "name": "Hồ Đăng Khoa",
+    "subjectTeam": "GDKTPL",
+    "className": "12 GDKTPL"
+  }
+]

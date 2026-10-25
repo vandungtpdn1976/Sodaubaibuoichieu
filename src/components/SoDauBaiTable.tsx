@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Save,
   Edit2,
@@ -13,6 +13,7 @@ import {
   X,
   Calendar,
   Mail,
+  Users,
 } from 'lucide-react';
 import {
   LogPeriodEntry,
@@ -21,6 +22,7 @@ import {
   CurrentUser,
 } from '../types';
 import { checkIsAdmin } from '../constants/initialData';
+import { canUserEditEntry, getTeacherAssignedSubject } from '../utils/permissionUtils';
 import { getDateForDayOfWeek } from '../utils/dateUtils';
 
 interface SoDauBaiTableProps {
@@ -38,6 +40,11 @@ interface SoDauBaiTableProps {
   onOpenQuickEntryForDay: (dayOfWeek: number) => void;
   onOpenAbsentModal: (entry: LogPeriodEntry) => void;
   filteredEntries: LogPeriodEntry[];
+  selectedTeacherFilter?: string;
+  onSelectTeacherFilter?: (teacher: string) => void;
+  selectedSubjectFilter?: string;
+  onSelectSubjectFilter?: (subject: string) => void;
+  searchQuery?: string;
 }
 
 export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
@@ -55,6 +62,11 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
   onOpenQuickEntryForDay,
   onOpenAbsentModal,
   filteredEntries,
+  selectedTeacherFilter = '',
+  onSelectTeacherFilter,
+  selectedSubjectFilter = '',
+  onSelectSubjectFilter,
+  searchQuery = '',
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftEntry, setDraftEntry] = useState<LogPeriodEntry | null>(null);
@@ -78,14 +90,31 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
   const days = [2, 3, 4, 5, 6, 7, 8];
   const [selectedDayTab, setSelectedDayTab] = useState<'all' | number>('all');
 
-  const canEditEntry = (_entry: LogPeriodEntry): boolean => {
-    // Admin always has full editing & clearing rights
-    if (currentUser.role === 'admin' || checkIsAdmin(currentUser.email)) return true;
-    // If the week is locked by the Vice Principal, editing is frozen
-    if (isLocked) return false;
-    // When the week is open, allow any teacher to edit or clear so that
-    // accidental entries (e.g. wrong teacher or wrong subject) can be deleted and re-entered
-    return true;
+  // Thống kê chi tiết giáo viên đã vào sổ đầu bài trong tuần
+  const teacherStats = useMemo(() => {
+    const map = new Map<string, { count: number; days: Set<number>; subject: string; email: string }>();
+
+    entries.forEach((e) => {
+      const sig = e.teacherSignature?.trim();
+      const hasContent = Boolean(e.subject || e.ppctLesson || e.lessonTitle);
+      if (sig && hasContent) {
+        const key = sig.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, { count: 0, days: new Set(), subject: e.subject || '', email: e.teacherEmail || '' });
+        }
+        const record = map.get(key)!;
+        record.count++;
+        record.days.add(Number(e.dayOfWeek));
+        if (!record.subject && e.subject) record.subject = e.subject;
+        if (!record.email && e.teacherEmail) record.email = e.teacherEmail;
+      }
+    });
+
+    return map;
+  }, [entries]);
+
+  const canEditEntry = (entry: LogPeriodEntry): boolean => {
+    return canUserEditEntry(currentUser, teachers, entry, isLocked);
   };
 
   const handleStartEdit = (entry: LogPeriodEntry) => {
@@ -133,6 +162,11 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
   const handleConfirmClearRow = async (reopenForEdit: boolean) => {
     if (!confirmClearEntry) return;
     const target = confirmClearEntry;
+    if (!canEditEntry(target)) {
+      alert('Bạn không có quyền xóa tiết dạy của môn học này.');
+      setConfirmClearEntry(null);
+      return;
+    }
     setConfirmClearEntry(null);
     setSavingId(target.id);
 
@@ -159,7 +193,7 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
     }
   };
 
-  // Clear all 5 periods of a cluster to empty rows (keep cluster intact for re-entry)
+  // Clear all periods of a cluster that the user is authorized to edit
   const handleClearClusterContent = async (dayOfWeek: number, clusterIndex: number) => {
     setConfirmClusterAction(null);
     setIsClearingBatch(true);
@@ -170,18 +204,21 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
           (Number(e.clusterIndex) || 1) === Number(clusterIndex)
       );
       for (const row of clusterRows) {
-        const cleared: LogPeriodEntry = {
-          ...row,
-          subject: '',
-          ppctLesson: '',
-          absentCount: 0,
-          absentStudents: '',
-          lessonTitle: '',
-          teacherSignature: '',
-          teacherEmail: '',
-          updatedAt: new Date().toLocaleString('vi-VN'),
-        };
-        await onSaveEntry(cleared);
+        // Only clear entries that the current teacher is authorized to edit
+        if (canEditEntry(row)) {
+          const cleared: LogPeriodEntry = {
+            ...row,
+            subject: '',
+            ppctLesson: '',
+            absentCount: 0,
+            absentStudents: '',
+            lessonTitle: '',
+            teacherSignature: '',
+            teacherEmail: '',
+            updatedAt: new Date().toLocaleString('vi-VN'),
+          };
+          await onSaveEntry(cleared);
+        }
       }
     } finally {
       setIsClearingBatch(false);
@@ -216,7 +253,137 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
         </div>
       </div>
 
-      {/* Day Filter Tabs: Cho phép Quản trị viên và Giáo viên chọn xem tất cả hoặc bấm xem riêng Thứ 7 */}
+      {/* Super Admin Status Banner */}
+      {(currentUser.role === 'admin' || checkIsAdmin(currentUser.email)) && (
+        <div className="bg-emerald-50 border border-emerald-300 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-emerald-950 font-medium shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse" />
+            <span>
+              <strong>TÀI KHOẢN BGH (SUPER_ADMIN):</strong> Đang hiển thị toàn bộ dữ liệu của <strong>tất cả giáo viên & môn học</strong> trong <strong>Tuần {currentWeek}</strong>.
+            </span>
+          </div>
+          {(selectedTeacherFilter || selectedSubjectFilter || searchQuery) && (
+            <button
+              type="button"
+              onClick={() => {
+                if (onSelectTeacherFilter) onSelectTeacherFilter('');
+                if (onSelectSubjectFilter) onSelectSubjectFilter('');
+              }}
+              className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-[11px] cursor-pointer shadow-2xs"
+            >
+              Bấm để xem tất cả (Bỏ lọc)
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Teacher Activity Monitor Strip: Cho phép Quản trị viên (Thầy Võ Văn Dũng) và giáo viên theo dõi toàn bộ giáo viên vào sổ */}
+      <div className="no-print bg-white border border-slate-200 rounded-xl p-3 shadow-2xs space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Users className="w-4 h-4 text-blue-900" />
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+              Tiến độ giáo viên vào sổ Tuần {currentWeek}:
+            </span>
+            <span className="text-xs font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full">
+              {teacherStats.size} / {teachers.length} Giáo viên đã vào sổ
+            </span>
+            <span className="text-xs text-slate-500 font-medium">
+              ({entries.filter((e) => Boolean(e.teacherSignature && (e.subject || e.lessonTitle))).length} tiết đã ký các thứ trong tuần)
+            </span>
+          </div>
+
+          {selectedTeacherFilter && onSelectTeacherFilter && (
+            <button
+              type="button"
+              onClick={() => onSelectTeacherFilter('')}
+              className="text-xs text-blue-700 hover:text-blue-900 font-semibold underline cursor-pointer"
+            >
+              ✕ Đang xem riêng: <strong>{selectedTeacherFilter === 'my_periods' ? 'Thầy Võ Văn Dũng (Môn Sử)' : selectedTeacherFilter}</strong> (Bấm để xem tất cả)
+            </button>
+          )}
+        </div>
+
+        {/* Teacher Chips Filter Bar */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {onSelectTeacherFilter && (
+            <button
+              type="button"
+              onClick={() => onSelectTeacherFilter('')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                !selectedTeacherFilter
+                  ? 'bg-blue-950 text-white shadow-2xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+              title="Xem tất cả giáo viên vào sổ trong tuần"
+            >
+              Tất cả GV ({teacherStats.size}/{teachers.length})
+            </button>
+          )}
+
+          {/* Chip riêng của Thầy Võ Văn Dũng (Dual-role) */}
+          {(() => {
+            const myEntry = teacherStats.get('võ văn dũng') || teacherStats.get('thầy võ văn dũng');
+            const isSelected = selectedTeacherFilter === 'my_periods' || selectedTeacherFilter === 'Võ Văn Dũng';
+            return onSelectTeacherFilter ? (
+              <button
+                type="button"
+                onClick={() => onSelectTeacherFilter(isSelected ? '' : 'my_periods')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 border ${
+                  isSelected
+                    ? 'bg-amber-500 text-white border-amber-600 shadow-xs ring-2 ring-amber-300'
+                    : myEntry
+                    ? 'bg-indigo-50 text-indigo-900 border-indigo-300 hover:bg-indigo-100'
+                    : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
+                }`}
+                title="Tài khoản của bạn: Thầy Võ Văn Dũng (Quản trị viên & GV Môn Sử)"
+              >
+                <span>⭐ Thầy Võ Văn Dũng (Sử):</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  isSelected ? 'bg-white/20 text-white' : 'bg-indigo-200 text-indigo-950'
+                }`}>
+                  {myEntry ? `${myEntry.count} tiết đã ký` : 'Chưa vào sổ'}
+                </span>
+              </button>
+            ) : null;
+          })()}
+
+          {/* Các giáo viên khác */}
+          {teachers
+            .filter((t) => t.email.toLowerCase() !== 'vandungtpdn1976@gmail.com')
+            .map((t) => {
+              const stat = teacherStats.get(t.teacherName.trim().toLowerCase());
+              const isSelected = selectedTeacherFilter === t.teacherName;
+              return onSelectTeacherFilter ? (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => onSelectTeacherFilter(isSelected ? '' : t.teacherName)}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1 border ${
+                    isSelected
+                      ? 'bg-blue-900 text-white border-blue-900 shadow-2xs ring-2 ring-blue-400'
+                      : stat
+                      ? 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-blue-50 hover:text-blue-950'
+                      : 'bg-slate-50/60 text-slate-400 border-dashed border-slate-200 hover:bg-slate-100'
+                  }`}
+                  title={`${t.teacherName} (${t.subject}): ${stat ? `${stat.count} tiết đã vào sổ các thứ trong tuần` : 'Chưa vào sổ tiết nào'}`}
+                >
+                  <span className="font-semibold">{t.teacherName}</span>
+                  <span className="opacity-70 text-[10px]">({t.subject})</span>
+                  {stat ? (
+                    <span className={`text-[10px] px-1 rounded font-bold ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-900'}`}>
+                      {stat.count}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-amber-600 font-bold">0</span>
+                  )}
+                </button>
+              ) : null;
+            })}
+        </div>
+      </div>
+
+      {/* Day Filter Tabs: Cho phép Quản trị viên và Giáo viên chọn xem tất cả hoặc bấm xem riêng Thứ 7, Chủ Nhật */}
       <div className="no-print bg-white border border-slate-200 rounded-xl p-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
@@ -403,15 +570,56 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
                     const editable = canEditEntry(entry);
                     const isSaving = savingId === entry.id;
 
+                    const isMyEntry =
+                      Boolean(
+                        entry.teacherSignature?.toLowerCase().includes('dũng') ||
+                        entry.teacherEmail?.toLowerCase() === 'vandungtpdn1976@gmail.com'
+                      );
+
+                    const matchesTeacherFilter = !selectedTeacherFilter
+                      ? true
+                      : selectedTeacherFilter === 'my_periods'
+                      ? isMyEntry || entry.subject === 'Sử'
+                      : (entry.teacherSignature || '').toLowerCase().trim() === selectedTeacherFilter.toLowerCase().trim() ||
+                        (entry.teacherEmail || '').toLowerCase().trim() === selectedTeacherFilter.toLowerCase().trim();
+
+                    const matchesSubjectFilter = !selectedSubjectFilter
+                      ? true
+                      : entry.subject === selectedSubjectFilter;
+
+                    const matchesSearchQuery = !searchQuery || !searchQuery.trim()
+                      ? true
+                      : Boolean(
+                          entry.lessonTitle?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          entry.subject?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          entry.teacherSignature?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          entry.absentStudents?.toLowerCase().includes(searchQuery.toLowerCase())
+                        );
+
+                    const hasActiveFilter = Boolean(
+                      selectedTeacherFilter || selectedSubjectFilter || (searchQuery && searchQuery.trim())
+                    );
+                    const matchesAllFilters =
+                      matchesTeacherFilter && matchesSubjectFilter && matchesSearchQuery;
+
                     const dayBg =
-                      dayNum % 2 === 0
+                      dayNum === 8
+                        ? 'bg-rose-50/20 hover:bg-rose-50/50'
+                        : dayNum % 2 === 0
                         ? 'bg-white hover:bg-slate-50/70'
                         : 'bg-slate-50/50 hover:bg-slate-100/60';
+
+                    const rowHighlight =
+                      hasActiveFilter && matchesAllFilters && Boolean(entry.subject || entry.ppctLesson || entry.lessonTitle || entry.teacherSignature)
+                        ? 'bg-blue-50/90 ring-2 ring-blue-500/80 ring-inset font-medium'
+                        : hasActiveFilter && !matchesAllFilters
+                        ? 'opacity-30'
+                        : 'opacity-100';
 
                     return (
                       <tr
                         key={entry.id}
-                        className={`border-b border-slate-300 transition-colors ${dayBg} ${
+                        className={`border-b border-slate-300 transition-colors ${dayBg} ${rowHighlight} ${
                           isEditing
                             ? 'ring-2 ring-blue-500 ring-inset bg-blue-50/40'
                             : ''
@@ -475,11 +683,17 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
                               className="w-full px-2 py-1 bg-white border border-blue-400 rounded text-xs font-semibold text-blue-950 focus:outline-hidden font-sans"
                             >
                               <option value="">-- Trống --</option>
-                              {config.subjectsList.map((subj) => (
-                                <option key={subj} value={subj}>
-                                  {subj}
-                                </option>
-                              ))}
+                              {(() => {
+                                const teacherSubj = getTeacherAssignedSubject(currentUser, teachers);
+                                const allowedSubjects = (teacherSubj && teacherSubj !== 'ALL')
+                                  ? [teacherSubj]
+                                  : config.subjectsList;
+                                return allowedSubjects.map((subj) => (
+                                  <option key={subj} value={subj}>
+                                    {subj}
+                                  </option>
+                                ));
+                              })()}
                             </select>
                           ) : (
                             <span
@@ -711,9 +925,16 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
                             </div>
                           ) : (
                             <div className="text-center py-0.5">
-                              <div className="font-semibold text-slate-800 text-xs">
-                                {entry.teacherSignature || (
-                                  <span className="text-slate-300">-</span>
+                              <div className="font-semibold text-slate-800 text-xs flex items-center justify-center gap-1 flex-wrap">
+                                <span>{entry.teacherSignature || <span className="text-slate-300">-</span>}</span>
+                                {Boolean(
+                                  entry.teacherSignature &&
+                                  (entry.teacherSignature.toLowerCase().includes('dũng') ||
+                                    entry.teacherEmail?.toLowerCase() === 'vandungtpdn1976@gmail.com')
+                                ) && (
+                                  <span className="text-[9px] bg-indigo-100 text-indigo-900 border border-indigo-200 font-bold px-1 py-0.2 rounded" title="Tiết dạy Môn Sử của Thầy Võ Văn Dũng">
+                                    ⭐ Của bạn
+                                  </span>
                                 )}
                               </div>
                               {(() => {

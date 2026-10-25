@@ -42,6 +42,11 @@ export interface TeacherAssignment {
   subject: string;
   position?: string; // Tổ trưởng, Tổ phó, Giáo viên
   phone?: string;
+  className?: string; // Lớp / đội tuyển phụ trách
+  weeksRange?: string; // Phạm vi tuần (e.g. "Tuần 1 - 35")
+  role?: 'SUPER_ADMIN' | 'TEACHER' | 'admin' | 'teacher';
+  status?: 'ACTIVE' | 'DISABLED';
+  expectedPeriods?: number; // Số tiết dự kiến theo TKB (default 5)
 }
 
 export interface Student {
@@ -65,8 +70,34 @@ export interface SchoolConfig {
 }
 
 export interface CurrentUser {
+  uid?: string;
   name: string;
   email: string;
-  role: 'admin' | 'teacher';
+  role: 'SUPER_ADMIN' | 'TEACHER' | 'admin' | 'teacher';
+  status?: 'ACTIVE' | 'DISABLED';
   assignedSubject?: string;
+  position?: string;
+  className?: string;
+  expectedPeriods?: number;
 }
+
+export type ProgressStatus = 'COMPLETED' | 'INCOMPLETE' | 'NOT_ENTERED' | 'NO_SCHEDULE';
+
+export interface TeacherProgressItem {
+  teacherId: string;
+  teacherName: string;
+  email: string;
+  subject: string;
+  className: string;
+  expectedPeriods: number;
+  enteredPeriods: number;
+  status: ProgressStatus;
+  missingPeriods: number[];
+  lessonsEntered: {
+    dayOfWeek: number;
+    period: number;
+    ppctLesson: string;
+    lessonTitle: string;
+  }[];
+}
+

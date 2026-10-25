@@ -17,6 +17,7 @@ import {
   TeacherAssignment,
 } from '../types';
 import { DEFAULT_SUBJECTS_LIST, checkIsAdmin } from '../constants/initialData';
+import { canUserEditEntry, getTeacherAssignedSubject } from '../utils/permissionUtils';
 
 interface MobilePeriodCardViewProps {
   entries: LogPeriodEntry[];
@@ -57,19 +58,7 @@ export const MobilePeriodCardView: React.FC<MobilePeriodCardViewProps> = ({
   const days = [2, 3, 4, 5, 6, 7, 8];
 
   const canEditEntry = (entry: LogPeriodEntry): boolean => {
-    // Admin (vandungtpdn1976@gmail.com) always has full editing rights
-    if (currentUser.role === 'admin' || checkIsAdmin(currentUser.email)) return true;
-    if (isLocked) return false;
-    if (currentUser.role === 'teacher') {
-      if (!entry.subject) return true;
-      if (entry.subject === currentUser.assignedSubject) return true;
-      if (entry.teacherEmail && entry.teacherEmail.toLowerCase() === currentUser.email.toLowerCase()) return true;
-      if (entry.teacherSignature && entry.teacherSignature.toLowerCase() === currentUser.name.toLowerCase()) return true;
-      return teachers.some(
-        (t) => t.email.toLowerCase() === currentUser.email.toLowerCase() && t.subject === entry.subject
-      );
-    }
-    return false;
+    return canUserEditEntry(currentUser, teachers, entry, isLocked);
   };
 
   const startEdit = (entry: LogPeriodEntry) => {
@@ -253,11 +242,17 @@ export const MobilePeriodCardView: React.FC<MobilePeriodCardViewProps> = ({
                               className="w-full border border-slate-300 rounded px-2 py-1.5 font-semibold text-blue-950"
                             >
                               <option value="">-- Chọn môn --</option>
-                              {DEFAULT_SUBJECTS_LIST.map((subj) => (
-                                <option key={subj} value={subj}>
-                                  {subj}
-                                </option>
-                              ))}
+                              {(() => {
+                                const teacherSubj = getTeacherAssignedSubject(currentUser, teachers);
+                                const allowedSubjects = (teacherSubj && teacherSubj !== 'ALL')
+                                  ? [teacherSubj]
+                                  : DEFAULT_SUBJECTS_LIST;
+                                return allowedSubjects.map((subj) => (
+                                  <option key={subj} value={subj}>
+                                    {subj}
+                                  </option>
+                                ));
+                              })()}
                             </select>
                           </div>
 
@@ -389,9 +384,20 @@ export const MobilePeriodCardView: React.FC<MobilePeriodCardViewProps> = ({
                             <span className="text-red-600 font-medium">
                               {entry.absentStudents ? `Vắng: ${entry.absentStudents}` : ''}
                             </span>
-                            <span className="font-serif italic text-slate-700">
-                              {entry.teacherSignature || 'Chưa ký'}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-serif italic text-slate-700">
+                                {entry.teacherSignature || 'Chưa ký'}
+                              </span>
+                              {Boolean(
+                                entry.teacherSignature &&
+                                (entry.teacherSignature.toLowerCase().includes('dũng') ||
+                                  entry.teacherEmail?.toLowerCase() === 'vandungtpdn1976@gmail.com')
+                              ) && (
+                                <span className="text-[9px] bg-indigo-100 text-indigo-900 border border-indigo-200 font-bold px-1 py-0.2 rounded">
+                                  ⭐ Của bạn
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}

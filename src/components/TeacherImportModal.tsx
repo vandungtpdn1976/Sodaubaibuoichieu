@@ -264,7 +264,7 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
       ['STT', 'Họ và tên giáo viên', 'Chức vụ', 'Môn phụ trách', 'Email Google', 'Số điện thoại'],
       ['1', 'Võ Văn Dũng', 'Tổ trưởng', 'Sử', 'vandungtpdn1976@gmail.com', '0905890123'],
       ['2', 'Mai Thị Quỳ', 'Giáo viên', 'Địa lí', 'quy.mt@gmail.com', '0905901234'],
-      ['3', 'Nguyễn Anh Tuấn', 'Tổ phó', 'Toán', 'tuan.na@gmail.com', '0905123001'],
+      ['3', 'Nguyễn Anh Tuấn', 'Tổ phó', 'Toán', 'totoancvabd@gmail.com', '0905123001'],
       ['4', 'Nguyễn Thị Thúy', 'Giáo viên', 'Toán', 'thuy.nt@gmail.com', '0905123002'],
       ['5', 'Vũ Thanh Thủy', 'Tổ trưởng', 'Lí', 'thuy.vt@gmail.com', '0905123003'],
     ];
@@ -393,7 +393,7 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
                   rows={6}
                   value={rawText}
                   onChange={(e) => setRawText(e.target.value)}
-                  placeholder={`Dán dữ liệu copy từ Excel hoặc Word vào đây, ví dụ:\n1\tNguyễn Anh Tuấn\tTổ phó\tToán\ttuan.na@gmail.com\t0905123001\n2\tVũ Thanh Thủy\tTổ trưởng\tLí\tthuy.vt@gmail.com\t0905123003\n3\tVõ Văn Dũng\tTổ trưởng\tSử\tvandungtpdn1976@gmail.com\t0905890123`}
+                  placeholder={`Dán dữ liệu copy từ Excel hoặc Word vào đây, ví dụ:\n1\tNguyễn Anh Tuấn\tTổ phó\tToán\ttotoancvabd@gmail.com\t0905123001\n2\tVũ Thanh Thủy\tTổ trưởng\tLí\tthuy.vt@gmail.com\t0905123003\n3\tVõ Văn Dũng\tTổ trưởng\tSử\tvandungtpdn1976@gmail.com\t0905890123`}
                   className="w-full p-3 text-xs font-mono border border-slate-300 rounded-xl focus:border-blue-900 focus:ring-1 focus:ring-blue-900 bg-white"
                 />
               </div>
