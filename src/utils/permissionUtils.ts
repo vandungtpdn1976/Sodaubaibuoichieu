@@ -9,7 +9,10 @@ export function checkIsAdmin(email?: string, teachers: TeacherAssignment[] = [])
   if (!email) return false;
   const lower = email.trim().toLowerCase();
   
-  if (lower === 'vandungtpdn1976@gmail.com' || ADMIN_EMAILS.some((adm) => adm.toLowerCase() === lower)) {
+  if (
+    lower === 'vandungtpdn1976@gmail.com' ||
+    ADMIN_EMAILS.some((adm) => adm.toLowerCase() === lower)
+  ) {
     return true;
   }
 
@@ -62,12 +65,11 @@ export function getTeacherAssignedSubject(
  * Checks whether a user is authorized to edit, clear, or delete a logbook period entry.
  *
  * Rules:
- * - Admin (`vandungtpdn1976@gmail.com`) can edit/delete ANY entry in ANY week at ANY time.
- * - Disabled accounts CANNOT edit/delete.
+ * - Admin (SUPER_ADMIN) can edit/delete ANY entry in ANY week at ANY time.
+ * - Unauthenticated or Disabled accounts CANNOT edit/delete.
  * - If week is locked by Vice Principal/Admin, teachers CANNOT edit/delete.
- * - If entry has NO subject assigned yet (`!entry.subject`), any teacher can enter data for their subject.
- * - If entry ALREADY HAS a subject assigned, teacher can ONLY edit/delete if `entry.subject` matches
- *   their assigned subject (e.g. 'Toán' teacher can only edit 'Toán' entries).
+ * - Teachers can ONLY edit/clear/delete entries belonging to their assigned subject.
+ * - Teachers CANNOT edit/clear/delete entries assigned to other subjects.
  */
 export function canUserEditEntry(
   user: CurrentUser,
@@ -75,14 +77,20 @@ export function canUserEditEntry(
   entry: LogPeriodEntry,
   isLocked: boolean
 ): boolean {
+  if (!user || !user.email) {
+    return false;
+  }
+
   // Check disabled status
   if (user.status === 'DISABLED') {
     return false;
   }
 
-  if (user.email && Array.isArray(teachers)) {
+  const userEmailLower = user.email.trim().toLowerCase();
+
+  if (Array.isArray(teachers) && teachers.length > 0) {
     const matchedTeacher = teachers.find(
-      (t) => t.email && t.email.trim().toLowerCase() === user.email.trim().toLowerCase()
+      (t) => t.email && t.email.trim().toLowerCase() === userEmailLower
     );
     if (matchedTeacher && matchedTeacher.status === 'DISABLED') {
       return false;
@@ -100,41 +108,65 @@ export function canUserEditEntry(
   }
 
   const teacherSubject = getTeacherAssignedSubject(user, teachers);
-
-  // If entry has no subject assigned yet, any teacher can enter lesson data for their subject
-  if (!entry.subject || !entry.subject.trim()) {
-    return true;
-  }
-
-  if (!teacherSubject) {
-    // If teacher has no subject resolved, check if their email matches teacherEmail
-    if (
-      entry.teacherEmail &&
-      user.email &&
-      entry.teacherEmail.trim().toLowerCase() === user.email.trim().toLowerCase()
-    ) {
-      return true;
-    }
+  if (!teacherSubject || teacherSubject === 'NONE') {
     return false;
   }
 
-  // Strict subject isolation: Compare entry's subject with teacher's assigned subject
-  const entrySubjectLower = entry.subject.trim().toLowerCase();
-  const teacherSubjectLower = teacherSubject.trim().toLowerCase();
-
-  if (entrySubjectLower === teacherSubjectLower) {
-    return true;
+  // If entry has an assigned subject, compare directly with teacher's assigned subject
+  if (entry.subject && entry.subject.trim()) {
+    return entry.subject.trim().toLowerCase() === teacherSubject.trim().toLowerCase();
   }
 
-  // Match by teacher email
-  if (
-    entry.teacherEmail &&
-    user.email &&
-    entry.teacherEmail.trim().toLowerCase() === user.email.trim().toLowerCase()
-  ) {
+  // If entry has no subject assigned yet (empty slot), teacher can edit to add their assigned subject
+  return true;
+}
+
+/**
+ * Checks if a teacher is authorized to perform actions for a specific subject.
+ */
+export function canUserEditSubject(
+  user: CurrentUser,
+  subject: string,
+  teachers: TeacherAssignment[] = []
+): boolean {
+  if (!user || !user.email) return false;
+  if (checkIsAdmin(user.email, teachers) || user.role === 'SUPER_ADMIN' || user.role === 'admin') {
     return true;
   }
+  if (user.status === 'DISABLED') return false;
 
-  return false;
+  const assigned = getTeacherAssignedSubject(user, teachers);
+  if (!assigned || assigned === 'NONE') return false;
+  if (!subject || !subject.trim()) return true;
+
+  return assigned.trim().toLowerCase() === subject.trim().toLowerCase();
+}
+
+/**
+ * Checks if a user is authorized to delete a 5-period cluster.
+ * Super Admin can delete any cluster.
+ * Teachers can only delete a cluster if ALL non-empty entries inside that cluster belong to their assigned subject.
+ */
+export function canUserDeleteCluster(
+  user: CurrentUser,
+  clusterEntries: LogPeriodEntry[],
+  teachers: TeacherAssignment[],
+  isLocked: boolean
+): boolean {
+  if (!user || !user.email) return false;
+  if (checkIsAdmin(user.email, teachers) || user.role === 'SUPER_ADMIN' || user.role === 'admin') {
+    return true;
+  }
+  if (isLocked || user.status === 'DISABLED') return false;
+
+  const assignedSubject = getTeacherAssignedSubject(user, teachers);
+  if (!assignedSubject || assignedSubject === 'NONE') return false;
+
+  const filledEntries = clusterEntries.filter((e) => Boolean(e.subject && e.subject.trim()));
+  if (filledEntries.length === 0) return true; // Empty cluster can be deleted/reset by assigned teacher
+
+  return filledEntries.every(
+    (e) => e.subject.trim().toLowerCase() === assignedSubject.trim().toLowerCase()
+  );
 }
 

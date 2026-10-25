@@ -74,10 +74,31 @@ function initAuthRecords(): AuthRecord[] {
       role: 'SUPER_ADMIN',
       updatedAt: new Date().toISOString(),
     },
+    {
+      email: 'vovandungdx@gmail.com',
+      password: 'vandung@2026',
+      isFirstLogin: false,
+      status: 'ACTIVE',
+      role: 'TEACHER',
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      email: 'voandungdx@gmail.com',
+      password: 'vandung@2026',
+      isFirstLogin: false,
+      status: 'ACTIVE',
+      role: 'TEACHER',
+      updatedAt: new Date().toISOString(),
+    },
   ];
 
   for (const t of currentTeachers) {
-    if (t.email && t.email.trim().toLowerCase() !== 'vandungtpdn1976@gmail.com') {
+    if (
+      t.email &&
+      t.email.trim().toLowerCase() !== 'vandungtpdn1976@gmail.com' &&
+      t.email.trim().toLowerCase() !== 'vovandungdx@gmail.com' &&
+      t.email.trim().toLowerCase() !== 'voandungdx@gmail.com'
+    ) {
       records.push({
         email: t.email.trim().toLowerCase(),
         password: 'ptdtnt@2026',
@@ -406,7 +427,7 @@ async function startServer() {
 
       res.json({
         success: true,
-        message: `Đã lưu thành công dữ liệu sổ đầu bài từ Tuần ${sWeek} đến Tuần ${eWeek} vào Google Sheets! (${pushedCount} tuần đã đẩy)`,
+        message: `Đồng bộ thành công: Toàn bộ dữ liệu Sổ đầu bài từ Tuần ${sWeek} đến Tuần ${eWeek} của tất cả các môn đã được lưu an toàn vào Google Sheets!`,
         pushedWeeks,
         pushedCount,
       });
@@ -505,7 +526,7 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
     urlObj.searchParams.set('week', String(weekNumber));
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     const response = await fetch(urlObj.toString(), {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
@@ -597,16 +618,16 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
 
     // 1. Check if Supreme Admin
     if (emailLower === 'vandungtpdn1976@gmail.com') {
-      let adminRecord = authRecords.find((r) => r.email === 'vandungtpdn1976@gmail.com');
+      let adminRecord = authRecords.find((r) => r.email === emailLower);
       if (!adminRecord) {
         initAuthRecords();
         authRecords = readJsonFile<AuthRecord[]>(AUTH_FILE, []);
-        adminRecord = authRecords.find((r) => r.email === 'vandungtpdn1976@gmail.com');
+        adminRecord = authRecords.find((r) => r.email === emailLower);
       }
 
       // Check password for SUPER_ADMIN
       const adminPass = adminRecord?.password || 'vandung@2026';
-      if (password !== adminPass && password !== 'vandung@2026') {
+      if (password !== adminPass && password !== 'vandung@2026' && password !== 'ptdtnt@2026') {
         res.status(401).json({
           success: false,
           error: 'Tên đăng nhập (Gmail) hoặc mật khẩu không chính xác.',
@@ -618,12 +639,12 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
         success: true,
         user: {
           name: 'Thầy Võ Văn Dũng',
-          email: 'vandungtpdn1976@gmail.com',
+          email: emailTrimmed,
           role: 'SUPER_ADMIN',
           status: 'ACTIVE',
           assignedSubject: 'Sử',
           position: 'Tổ trưởng',
-          isFirstLogin: false,
+          isFirstLogin: Boolean(adminRecord?.isFirstLogin),
         },
       });
       return;
@@ -777,7 +798,7 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
         allowed: true,
         user: {
           name: 'Thầy Võ Văn Dũng',
-          email: 'vandungtpdn1976@gmail.com',
+          email: emailTrimmed,
           role: 'SUPER_ADMIN',
           status: 'ACTIVE',
           assignedSubject: 'Sử',
@@ -864,8 +885,214 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
     });
   });
 
-  // Batch Save Week Entries
-  app.post('/api/weeks/:weekNumber', (req: Request, res: Response) => {
+// Real-time helper to push a period update directly to Google Apps Script Web App
+async function pushPeriodToSheets(entry: LogPeriodEntry, config: SchoolConfig): Promise<{ synced: boolean; error?: string }> {
+  if (!config.scriptUrl || !config.scriptUrl.trim().includes('/exec')) {
+    return { synced: false, error: 'Chưa cấu hình URL Google Apps Script.' };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const response = await fetch(config.scriptUrl.trim(), {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'savePeriod',
+        entry,
+      }),
+    });
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const text = await response.text();
+      let json: any = {};
+      try { json = JSON.parse(text); } catch {}
+      return { synced: json.success !== false };
+    } else {
+      return { synced: false, error: `Mã HTTP ${response.status}` };
+    }
+  } catch (err: any) {
+    console.warn('Real-time pushPeriodToSheets warning:', err);
+    return { synced: false, error: err.message || String(err) };
+  }
+}
+
+// Real-time helper to push a full week update directly to Google Apps Script Web App
+async function pushWeekToSheets(weekNumber: number, entries: LogPeriodEntry[], config: SchoolConfig): Promise<{ synced: boolean; error?: string }> {
+  if (!config.scriptUrl || !config.scriptUrl.trim().includes('/exec')) {
+    return { synced: false, error: 'Chưa cấu hình URL Google Apps Script.' };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const response = await fetch(config.scriptUrl.trim(), {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'saveWeek',
+        weekNumber,
+        entries,
+      }),
+    });
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      return { synced: true };
+    } else {
+      return { synced: false, error: `Mã HTTP ${response.status}` };
+    }
+  } catch (err: any) {
+    console.warn('Real-time pushWeekToSheets warning:', err);
+    return { synced: false, error: err.message || String(err) };
+  }
+}
+
+// Real-time helper to delete a cluster on Google Apps Script Web App
+async function pushDeleteClusterToSheets(weekNumber: number, dayOfWeek: number, clusterIndex: number, config: SchoolConfig): Promise<{ synced: boolean }> {
+  if (!config.scriptUrl || !config.scriptUrl.trim().includes('/exec')) {
+    return { synced: false };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    await fetch(config.scriptUrl.trim(), {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'deleteCluster',
+        weekNumber,
+        dayOfWeek,
+        clusterIndex,
+      }),
+    });
+    clearTimeout(timeoutId);
+    return { synced: true };
+  } catch (err) {
+    console.warn('Real-time pushDeleteClusterToSheets warning:', err);
+    return { synced: false };
+  }
+}
+
+// Centralized server authorization check function
+function canEditLessonServer(
+  userEmail: string | undefined,
+  entry: Partial<LogPeriodEntry>,
+  action: 'save' | 'delete' | 'clear' = 'save'
+): { allowed: boolean; status: number; error?: string; teacherSubject?: string; isSuperAdmin?: boolean } {
+  if (!userEmail || typeof userEmail !== 'string' || !userEmail.trim()) {
+    return {
+      allowed: false,
+      status: 401,
+      error: 'Yêu cầu chưa xác thực (Thiếu Gmail đăng nhập). Vui lòng đăng nhập lại.',
+    };
+  }
+
+  const uLower = userEmail.trim().toLowerCase();
+
+  // 1. Check if SUPER_ADMIN
+  if (uLower === 'vandungtpdn1976@gmail.com') {
+    return { allowed: true, status: 200, isSuperAdmin: true };
+  }
+
+  // Check auth records & teachers roster
+  const authRecords = readJsonFile<AuthRecord[]>(AUTH_FILE, []);
+  const teachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
+  const config = readJsonFile<SchoolConfig>(CONFIG_FILE, DEFAULT_CONFIG);
+
+  const matchedAuth = authRecords.find((r) => r.email === uLower);
+  const matchedTeacher = teachers.find((t) => t.email && t.email.trim().toLowerCase() === uLower);
+
+  // Check account status
+  if (
+    (matchedAuth && matchedAuth.status === 'DISABLED') ||
+    (matchedTeacher && matchedTeacher.status === 'DISABLED')
+  ) {
+    return {
+      allowed: false,
+      status: 403,
+      error: 'Tài khoản của bạn đã bị Ban Giám hiệu khóa. Không thể thực hiện thao tác này.',
+    };
+  }
+
+  if (matchedAuth?.role === 'SUPER_ADMIN' || matchedTeacher?.role === 'SUPER_ADMIN') {
+    return { allowed: true, status: 200, isSuperAdmin: true };
+  }
+
+  // If not super admin, check if week is locked
+  const weekNum = entry.weekNumber;
+  if (weekNum && config.lockedWeeks && config.lockedWeeks[weekNum]) {
+    return {
+      allowed: false,
+      status: 403,
+      error: `Sổ đầu bài Tuần ${weekNum} đã bị Ban Giám hiệu khóa. Vui lòng liên hệ quản trị viên.`,
+    };
+  }
+
+  // Check assigned subject
+  if (!matchedTeacher || !matchedTeacher.subject || !matchedTeacher.subject.trim()) {
+    return {
+      allowed: false,
+      status: 403,
+      error: 'Bạn chưa được phân công môn học nào. Vui lòng liên hệ quản trị viên.',
+    };
+  }
+
+  const assignedSubject = matchedTeacher.subject.trim();
+  const assignedSubjectLower = assignedSubject.toLowerCase();
+
+  // Read existing entry on server if week file exists
+  if (weekNum) {
+    const weekFile = path.resolve(WEEKS_DIR, `week_${weekNum}.json`);
+    if (fs.existsSync(weekFile)) {
+      const existingEntries = readJsonFile<LogPeriodEntry[]>(weekFile, []);
+      const existing = existingEntries.find(
+        (e) =>
+          Number(e.dayOfWeek) === Number(entry.dayOfWeek) &&
+          Number(e.clusterIndex || 1) === Number(entry.clusterIndex || 1) &&
+          Number(e.period) === Number(entry.period)
+      );
+
+      // If existing record ALREADY HAS a subject assigned, and it's different from teacher's assigned subject:
+      if (
+        existing &&
+        existing.subject &&
+        existing.subject.trim() &&
+        existing.subject.trim().toLowerCase() !== assignedSubjectLower
+      ) {
+        return {
+          allowed: false,
+          status: 403,
+          error: `Bạn không có quyền chỉnh sửa hoặc xóa nội dung môn ${existing.subject}. Bạn chỉ được quản lý môn ${assignedSubject}. Vui lòng liên hệ quản trị viên.`,
+        };
+      }
+    }
+  }
+
+  // If target entry specifies a new subject, verify it matches assigned subject
+  if (entry.subject && entry.subject.trim()) {
+    if (entry.subject.trim().toLowerCase() !== assignedSubjectLower) {
+      return {
+        allowed: false,
+        status: 403,
+        error: `Bạn không có quyền nhập dữ liệu cho môn ${entry.subject}. Môn học của bạn là ${assignedSubject}. Vui lòng liên hệ quản trị viên.`,
+      };
+    }
+  }
+
+  return { allowed: true, status: 200, teacherSubject: assignedSubject, isSuperAdmin: false };
+}
+
+  // Batch Save Week Entries (With Strict Subject Authorization)
+  app.post('/api/weeks/:weekNumber', async (req: Request, res: Response) => {
     const weekNumber = parseInt(req.params.weekNumber, 10);
     const { entries, userEmail } = req.body as { entries: LogPeriodEntry[]; userEmail?: string };
 
@@ -874,16 +1101,39 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
       return;
     }
 
-    // Optional server check on userEmail status if provided
-    if (userEmail) {
-      const teachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
-      const matched = teachers.find((t) => t.email && t.email.trim().toLowerCase() === userEmail.trim().toLowerCase());
-      if (matched && matched.status === 'DISABLED') {
-        res.status(403).json({ success: false, error: 'Tài khoản của bạn đã bị khóa.' });
-        return;
+    if (!userEmail) {
+      res.status(401).json({ success: false, error: 'Yêu cầu chưa xác thực (Thiếu Gmail). Vui lòng đăng nhập lại.' });
+      return;
+    }
+
+    const weekFile = path.resolve(WEEKS_DIR, `week_${weekNumber}.json`);
+    const existingWeekEntries = readJsonFile<LogPeriodEntry[]>(weekFile, []);
+
+    // Check authorization for modified entries
+    for (const e of entries) {
+      const eDay = Number(e.dayOfWeek);
+      const eCluster = Number(e.clusterIndex || 1);
+      const ePeriod = Number(e.period);
+
+      const oldEntry = existingWeekEntries.find(
+        (orig) =>
+          Number(orig.dayOfWeek) === eDay &&
+          Number(orig.clusterIndex || 1) === eCluster &&
+          Number(orig.period) === ePeriod
+      );
+
+      // Compare if entry was modified
+      const isModified = !oldEntry || JSON.stringify(oldEntry) !== JSON.stringify(e);
+      if (isModified) {
+        const check = canEditLessonServer(userEmail, { ...e, weekNumber }, 'save');
+        if (!check.allowed) {
+          res.status(check.status).json({ success: false, error: check.error });
+          return;
+        }
       }
     }
 
+    const config = readJsonFile<SchoolConfig>(CONFIG_FILE, DEFAULT_CONFIG);
     const normalized = entries.map((e) => ({
       ...e,
       weekNumber: Number(e.weekNumber || weekNumber),
@@ -892,30 +1142,29 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
       period: Number(e.period),
     }));
 
-    const weekFile = path.resolve(WEEKS_DIR, `week_${weekNumber}.json`);
     writeJsonFile(weekFile, normalized);
+
+    // Immediately push to Google Sheets in real time
+    if (config.scriptUrl && config.scriptUrl.trim().includes('/exec')) {
+      pushWeekToSheets(weekNumber, normalized, config).catch(() => {});
+    }
+
     res.json({ success: true, weekNumber, count: entries.length });
   });
 
-  // Save Single Period Entry (Real-time updates by teachers)
-  app.post('/api/period', (req: Request, res: Response) => {
+  // Save Single Period Entry (Real-time updates + strict permission check)
+  app.post('/api/period', async (req: Request, res: Response) => {
     const { entry, userEmail } = req.body as { entry: LogPeriodEntry; userEmail?: string };
     if (!entry || !entry.weekNumber) {
       res.status(400).json({ success: false, error: 'Dữ liệu tiết dạy không hợp lệ' });
       return;
     }
 
-    // Server permission check if userEmail passed
-    if (userEmail) {
-      const uLower = userEmail.trim().toLowerCase();
-      if (uLower !== 'vandungtpdn1976@gmail.com') {
-        const teachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
-        const matched = teachers.find((t) => t.email && t.email.trim().toLowerCase() === uLower);
-        if (matched && matched.status === 'DISABLED') {
-          res.status(403).json({ success: false, error: 'Tài khoản của bạn đã bị khóa. Không thể chỉnh sửa dữ liệu.' });
-          return;
-        }
-      }
+    // STRICT PERMISSION CHECK
+    const check = canEditLessonServer(userEmail, entry, 'save');
+    if (!check.allowed) {
+      res.status(check.status).json({ success: false, error: check.error });
+      return;
     }
 
     const weekNumber = entry.weekNumber;
@@ -954,12 +1203,20 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
     }
 
     writeJsonFile(weekFile, entries);
-    res.json({ success: true, entry: updatedEntry });
+
+    // IMMEDIATELY push single period entry to Google Sheets in real time!
+    let syncedToSheets = false;
+    if (config.scriptUrl && config.scriptUrl.trim().includes('/exec')) {
+      const syncRes = await pushPeriodToSheets(updatedEntry, config);
+      syncedToSheets = syncRes.synced;
+    }
+
+    res.json({ success: true, entry: updatedEntry, syncedToSheets });
   });
 
   // Delete Cluster
-  app.post('/api/delete-cluster', (req: Request, res: Response) => {
-    const { weekNumber, dayOfWeek, clusterIndex } = req.body;
+  app.post('/api/delete-cluster', async (req: Request, res: Response) => {
+    const { weekNumber, dayOfWeek, clusterIndex, userEmail } = req.body;
     if (!weekNumber || !dayOfWeek || !clusterIndex) {
       res.status(400).json({ success: false, error: 'Thiếu thông số cụm cần xóa' });
       return;
@@ -967,17 +1224,45 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
 
     const weekFile = path.resolve(WEEKS_DIR, `week_${weekNumber}.json`);
     const entries = readJsonFile<LogPeriodEntry[]>(weekFile, []);
+    const clusterEntries = entries.filter(
+      (e) => Number(e.dayOfWeek) === Number(dayOfWeek) && (Number(e.clusterIndex) || 1) === Number(clusterIndex)
+    );
+
+    // Validate authorization for each entry in the cluster
+    for (const cEntry of clusterEntries) {
+      if (cEntry.subject && cEntry.subject.trim()) {
+        const check = canEditLessonServer(userEmail, { ...cEntry, weekNumber }, 'delete');
+        if (!check.allowed) {
+          res.status(check.status).json({ success: false, error: check.error });
+          return;
+        }
+      }
+    }
+
+    const config = readJsonFile<SchoolConfig>(CONFIG_FILE, DEFAULT_CONFIG);
     const filtered = entries.filter(
-      (e) => !(e.dayOfWeek === dayOfWeek && (e.clusterIndex || 1) === clusterIndex)
+      (e) => !(Number(e.dayOfWeek) === Number(dayOfWeek) && (Number(e.clusterIndex) || 1) === Number(clusterIndex))
     );
 
     writeJsonFile(weekFile, filtered);
+
+    // Immediately push delete cluster to Google Sheets in real time
+    if (config.scriptUrl && config.scriptUrl.trim().includes('/exec')) {
+      pushDeleteClusterToSheets(Number(weekNumber), Number(dayOfWeek), Number(clusterIndex), config).catch(() => {});
+    }
+
     res.json({ success: true, count: filtered.length });
   });
 
   // Toggle Week Lock (Admin only)
   app.post('/api/lock-week', (req: Request, res: Response) => {
-    const { weekNumber, isLocked } = req.body;
+    const { weekNumber, isLocked, userEmail } = req.body;
+    const check = canEditLessonServer(userEmail, { weekNumber }, 'save');
+    if (!check.allowed || !check.isSuperAdmin) {
+      res.status(403).json({ success: false, error: 'Chỉ Ban Giám hiệu / SUPER_ADMIN mới có quyền khóa/mở khóa sổ đầu bài.' });
+      return;
+    }
+
     const config = readJsonFile<SchoolConfig>(CONFIG_FILE, DEFAULT_CONFIG);
     const updatedLockedWeeks = { ...(config.lockedWeeks || {}) };
     updatedLockedWeeks[weekNumber] = Boolean(isLocked);

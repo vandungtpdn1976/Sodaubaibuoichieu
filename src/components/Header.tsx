@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { CurrentUser, TeacherAssignment, SchoolConfig } from '../types';
 import { checkIsAdmin } from '../constants/initialData';
+import { googleSignIn, googleSignOut } from '../services/googleAuthService';
 
 interface HeaderProps {
   currentUser: CurrentUser;
@@ -61,7 +62,6 @@ export const Header: React.FC<HeaderProps> = ({
   const handleGoogleSignIn = async () => {
     setIsSigningInGoogle(true);
     try {
-      const { googleSignIn, googleSignOut } = await import('../services/googleAuthService');
       const res = await googleSignIn();
       
       // If user closed the popup window or cancelled, res is null

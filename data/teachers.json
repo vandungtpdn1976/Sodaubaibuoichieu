@@ -129,11 +129,30 @@
   },
   {
     "id": "gv_17",
+    "teacherName": "Võ Văn Dũng (BGH)",
+    "position": "BGH / Quản trị viên",
+    "subject": "Sử",
+    "email": "vandungtpdn1976@gmail.com",
+    "phone": "0905890123",
+    "role": "SUPER_ADMIN"
+  },
+  {
+    "id": "gv_17_b",
     "teacherName": "Võ Văn Dũng",
     "position": "Tổ trưởng",
     "subject": "Sử",
-    "email": "vandungtpdn1976@gmail.com",
-    "phone": "0905890123"
+    "email": "vovandungdx@gmail.com",
+    "phone": "0905890123",
+    "role": "TEACHER"
+  },
+  {
+    "id": "gv_17_c",
+    "teacherName": "Võ Văn Dũng",
+    "position": "Tổ trưởng",
+    "subject": "Sử",
+    "email": "voandungdx@gmail.com",
+    "phone": "0905890123",
+    "role": "TEACHER"
   },
   {
     "id": "gv_18",

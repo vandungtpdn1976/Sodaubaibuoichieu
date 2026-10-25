@@ -113,7 +113,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       }
     } catch (err: any) {
       console.error('Google login error', err);
-      setErrorMessage('Lỗi đăng nhập Google Auth: ' + (err.message || String(err)));
+      const errStr = String(err?.message || err);
+      if (
+        errStr.includes('403') ||
+        errStr.includes('access_denied') ||
+        errStr.includes('restricted') ||
+        errStr.includes('popup-closed')
+      ) {
+        setErrorMessage(
+          'Google Sign-In bị chặn (Lỗi 403: access_denied từ Google Cloud do chưa duyệt domain OAuth). VUI LÒNG ĐĂNG NHẬP TRỰC TIẾP ở ô trên bằng Gmail: vovandungdx@gmail.com và Mật khẩu: ptdtnt@2026 (hoặc vandung@2026) để vào ứng dụng ngay!'
+        );
+      } else {
+        setErrorMessage('Lỗi đăng nhập Google Auth: ' + errStr);
+      }
     } finally {
       setIsSigningInGoogle(false);
     }

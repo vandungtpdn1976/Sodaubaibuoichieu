@@ -1,0 +1,186 @@
+[
+  {
+    "email": "vandungtpdn1976@gmail.com",
+    "password": "vandung@2026",
+    "isFirstLogin": false,
+    "status": "ACTIVE",
+    "role": "SUPER_ADMIN",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "vovandungdx@gmail.com",
+    "password": "vandung@2026",
+    "isFirstLogin": false,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "voandungdx@gmail.com",
+    "password": "vandung@2026",
+    "isFirstLogin": false,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "totoancvabd@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "thuycuong111107@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "thuymy.vu@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "vthung1308@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "xuantrungly78@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "giang160677dtntbp@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "anh.blue.86@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "nguyenhuyhoang171079@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "thuphuong.dtntbp@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "hanghoak7@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "damvanhungvuong@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "em.htt@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "ha.ttt@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "vuminhhang2803@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "nguyentbichthuan@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "nhiembuinew2dxbp@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
+    "email": "hobacbp@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.301Z"
+  },
+  {
+    "email": "quythuan80@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.301Z"
+  },
+  {
+    "email": "huyen.htt@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.301Z"
+  },
+  {
+    "email": "minhanhminh8790@gmail.com",
+    "password": "ptdtnt@2026",
+    "isFirstLogin": true,
+    "status": "ACTIVE",
+    "role": "TEACHER",
+    "updatedAt": "2026-10-25T07:03:42.301Z"
+  }
+]

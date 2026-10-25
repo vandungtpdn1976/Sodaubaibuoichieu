@@ -169,11 +169,30 @@ export const SAMPLE_DECISION_108_TEACHERS: TeacherAssignment[] = [
   // 17 & 18: Môn Lịch sử (2 GV)
   {
     id: 'gv_17',
-    teacherName: 'Võ Văn Dũng',
-    position: 'Tổ trưởng',
+    teacherName: 'Võ Văn Dũng (BGH)',
+    position: 'BGH / Quản trị viên',
     subject: 'Sử',
     email: 'vandungtpdn1976@gmail.com',
     phone: '0905890123',
+    role: 'SUPER_ADMIN',
+  },
+  {
+    id: 'gv_17_b',
+    teacherName: 'Võ Văn Dũng',
+    position: 'Tổ trưởng',
+    subject: 'Sử',
+    email: 'vovandungdx@gmail.com',
+    phone: '0905890123',
+    role: 'TEACHER',
+  },
+  {
+    id: 'gv_17_c',
+    teacherName: 'Võ Văn Dũng',
+    position: 'Tổ trưởng',
+    subject: 'Sử',
+    email: 'voandungdx@gmail.com',
+    phone: '0905890123',
+    role: 'TEACHER',
   },
   {
     id: 'gv_18',

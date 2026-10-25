@@ -14,6 +14,7 @@ import {
   Calendar,
   Mail,
   Users,
+  Lock,
 } from 'lucide-react';
 import {
   LogPeriodEntry,
@@ -142,6 +143,12 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
 
   const handleSubjectChange = (subj: string) => {
     if (!draftEntry) return;
+    const teacherSubj = getTeacherAssignedSubject(currentUser, teachers);
+    if (teacherSubj && teacherSubj !== 'ALL' && subj && subj.trim().toLowerCase() !== teacherSubj.trim().toLowerCase()) {
+      alert(`Bạn chỉ có quyền nhập và chỉnh sửa môn ${teacherSubj} được phân công.`);
+      return;
+    }
+
     const matchedTeachers = teachers.filter((t) => t.subject === subj);
     const loggedInTeacher = matchedTeachers.find(
       (t) => t.email.toLowerCase() === currentUser.email.toLowerCase()
@@ -1002,36 +1009,47 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
                             </div>
                           ) : (
                             <div className="flex items-center justify-center gap-1">
-                              {editable && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEdit(entry)}
-                                  className="p-1 text-blue-700 hover:bg-blue-100 rounded cursor-pointer"
-                                  title="Chỉnh sửa dòng tiết này"
+                              {editable ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEdit(entry)}
+                                    className="p-1 text-blue-700 hover:bg-blue-100 rounded cursor-pointer"
+                                    title="Chỉnh sửa dòng tiết này"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  {(entry.subject || entry.lessonTitle || entry.teacherSignature || entry.ppctLesson || entry.absentStudents) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmClearEntry(entry)}
+                                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded cursor-pointer"
+                                      title="Xóa trắng nội dung dòng này để nhập lại"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  {isClusterFirstRow && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmClusterAction({ dayOfWeek: dayNum, clusterIndex: cIdx })}
+                                      className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded cursor-pointer ml-1 text-xs font-semibold"
+                                      title={`Tùy chọn xóa cụm môn ${cIdx} của ${dayNames[dayNum]}`}
+                                    >
+                                      Xóa cụm
+                                    </button>
+                                  )}
+                                </>
+                              ) : entry.subject ? (
+                                <div
+                                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 cursor-help"
+                                  title={`Chỉ giáo viên môn ${entry.subject} hoặc Quản trị viên mới có quyền chỉnh sửa.`}
                                 >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              {editable && (entry.subject || entry.lessonTitle || entry.teacherSignature || entry.ppctLesson || entry.absentStudents) && (
-                                <button
-                                  type="button"
-                                  onClick={() => setConfirmClearEntry(entry)}
-                                  className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded cursor-pointer"
-                                  title="Xóa trắng nội dung dòng này để nhập lại"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              {/* Nút Xóa cụm ở dòng đầu tiên của cụm */}
-                              {isClusterFirstRow && editable && (
-                                <button
-                                  type="button"
-                                  onClick={() => setConfirmClusterAction({ dayOfWeek: dayNum, clusterIndex: cIdx })}
-                                  className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded cursor-pointer ml-1 text-xs font-semibold"
-                                  title={`Tùy chọn xóa cụm môn ${cIdx} của ${dayNames[dayNum]}`}
-                                >
-                                  Xóa cụm
-                                </button>
+                                  <Lock className="w-3 h-3 text-slate-400" />
+                                  <span>Khóa</span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-300 text-[10px]">-</span>
                               )}
                             </div>
                           )}

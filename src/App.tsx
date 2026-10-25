@@ -275,7 +275,7 @@ export default function App() {
     }
   }, [teachers, handleSelectUser]);
 
-  // Handle saving 1 period entry
+  // Handle saving 1 period entry with strict server authorization check
   const handleSaveEntry = async (updatedEntry: LogPeriodEntry) => {
     let finalEntry = { ...updatedEntry };
     if (finalEntry.teacherSignature && !finalEntry.teacherEmail) {
@@ -285,6 +285,14 @@ export default function App() {
       if (matched) {
         finalEntry.teacherEmail = matched.email;
       }
+    }
+
+    const res = await ApiService.savePeriodEntry(finalEntry, config, currentUser.email);
+    if (!res.success) {
+      showToast(res.error || 'Bạn không có quyền chỉnh sửa môn học này.', 'error');
+      // Reload fresh week data from server to revert optimistic update
+      loadCurrentWeek(currentWeek);
+      return;
     }
 
     setEntries((prev) => {
@@ -306,17 +314,12 @@ export default function App() {
       return [...prev, finalEntry];
     });
 
-    const res = await ApiService.savePeriodEntry(finalEntry, config);
-    if (res.error) {
-      showToast(res.error, 'info');
-    } else {
-      showToast(
-        `Đã lưu Tiết ${finalEntry.period} (${
-          finalEntry.subject ? `Môn ${finalEntry.subject}` : 'Thành công'
-        })!`,
-        'success'
-      );
-    }
+    showToast(
+      `Đã lưu Tiết ${finalEntry.period} (${
+        finalEntry.subject ? `Môn ${finalEntry.subject}` : 'Thành công'
+      })${res.syncedToSheets ? ' ⚡ (Đã đồng bộ tức thì sang Google Sheets!)' : ''}`,
+      'success'
+    );
   };
 
   // Handle adding a new 5-period cluster to a day
@@ -357,8 +360,13 @@ export default function App() {
     }
 
     const updated = [...entries, ...newRows];
+    const res = await ApiService.saveWeekData(currentWeek, updated, config, currentUser.email);
+    if (!res.success) {
+      showToast(res.error || 'Thao tác không được phép.', 'error');
+      loadCurrentWeek(currentWeek);
+      return;
+    }
     setEntries(updated);
-    await ApiService.saveWeekData(currentWeek, updated, config);
     showToast(`Đã thêm cụm 5 tiết mới cho Thứ ${dayOfWeek}!`, 'success');
   };
 
@@ -374,6 +382,12 @@ export default function App() {
         `Xác nhận xóa toàn bộ Cụm môn ${clusterIndex} của Thứ ${dayOfWeek}?`
       )
     ) {
+      const res = await ApiService.deleteCluster(currentWeek, dayOfWeek, clusterIndex, config, currentUser.email);
+      if (!res.success) {
+        showToast(res.error || 'Bạn không có quyền xóa cụm môn này.', 'error');
+        loadCurrentWeek(currentWeek);
+        return;
+      }
       const remaining = entries.filter(
         (e) =>
           !(
@@ -382,21 +396,25 @@ export default function App() {
           )
       );
       setEntries(remaining);
-      await ApiService.deleteCluster(currentWeek, dayOfWeek, clusterIndex, config);
       showToast(`Đã xóa Cụm môn ${clusterIndex}!`, 'info');
     }
   };
 
   // Quick Batch Entry callback
   const handleApplyBatch = async (newEntries: LogPeriodEntry[]) => {
+    const res = await ApiService.saveWeekData(currentWeek, newEntries, config, currentUser.email);
+    if (!res.success) {
+      showToast(res.error || 'Bạn không có quyền chỉnh sửa môn học của giáo viên khác.', 'error');
+      loadCurrentWeek(currentWeek);
+      return;
+    }
     setEntries(newEntries);
-    await ApiService.saveWeekData(currentWeek, newEntries, config);
     showToast('Đã áp dụng và lưu nhanh các tiết dạy thành công!', 'success');
   };
 
   // Toggle Week Lock (Admin only)
   const handleToggleLock = async () => {
-    if (currentUser.role !== 'admin') {
+    if (currentUser.role !== 'admin' && !checkIsAdmin(currentUser.email)) {
       showToast('Chỉ Ban giám hiệu mới có quyền khóa sổ.', 'error');
       return;
     }
@@ -404,7 +422,8 @@ export default function App() {
     const newConfig = await ApiService.toggleLockWeek(
       currentWeek,
       newLockedState,
-      config
+      config,
+      currentUser.email
     );
     setConfig(newConfig);
     showToast(
@@ -559,7 +578,7 @@ export default function App() {
   };
 
   const handlePushWeeks1To7 = useCallback(async () => {
-    showToast('Đang lưu và đẩy toàn bộ dữ liệu từ Tuần 1 đến Tuần 7 sang Google Sheets...', 'info');
+    showToast('Đang tiến hành lưu và đẩy toàn bộ dữ liệu (Tuần 1 – 7) sang Google Sheets...', 'info');
     const res = await ApiService.pushWeeksToSheets(1, 7, config);
     if (res.success) {
       showToast(res.message, 'success');
@@ -568,14 +587,10 @@ export default function App() {
     }
   }, [config, showToast]);
 
-  // Trigger automatic sync/push of Weeks 1 to 7 to Google Sheets if scriptUrl is configured
+  // Automatic background sync of Weeks 1 to 7 to Google Sheets if scriptUrl is configured
   useEffect(() => {
     if (config.scriptUrl && config.scriptUrl.trim()) {
-      ApiService.pushWeeksToSheets(1, 7, config).then((res) => {
-        if (res.success) {
-          console.log('Successfully pushed Weeks 1-7 to Google Sheets:', res.message);
-        }
-      });
+      ApiService.pushWeeksToSheets(1, 7, config).catch(() => {});
     }
   }, [config.scriptUrl]);
 

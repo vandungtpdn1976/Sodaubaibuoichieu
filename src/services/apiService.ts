@@ -478,7 +478,7 @@ export class ApiService {
       }
       return {
         success: true,
-        message: `Đã lưu thành công dữ liệu sổ đầu bài từ Tuần ${startWeek} đến Tuần ${endWeek} vào Google Sheets! (${pushed} tuần đã lưu)`,
+        message: `Đồng bộ thành công: Toàn bộ dữ liệu Sổ đầu bài từ Tuần ${startWeek} đến Tuần ${endWeek} của tất cả các môn đã được lưu an toàn vào Google Sheets!`,
       };
     } catch (err: any) {
       return {
@@ -549,7 +549,7 @@ export class ApiService {
     // 1. Primary: Fetch from central backend server API
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
       const res = await fetch(`/api/weeks/${weekNumber}`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
@@ -628,15 +628,38 @@ export class ApiService {
     return null;
   }
 
-  // Save 1 period entry (e.g. teacher editing a row)
+  // Save 1 period entry (e.g. teacher editing a row) with user authentication
   static async savePeriodEntry(
     entry: LogPeriodEntry,
-    config: SchoolConfig
-  ): Promise<{ success: boolean; error?: string }> {
+    config: SchoolConfig,
+    userEmail?: string
+  ): Promise<{ success: boolean; error?: string; syncedToSheets?: boolean }> {
     const weekNumber = entry.weekNumber;
     const localKey = `${STORAGE_KEY_PREFIX_WEEK}${weekNumber}`;
+    const emailToUse = userEmail || ApiService.loadCurrentUser().email;
 
-    // Update local cache
+    // 1. Send to central backend server (which checks permissions & pushes server-to-server to Google Sheets)
+    let syncedToSheets = false;
+    try {
+      const res = await fetch('/api/period', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entry, userEmail: emailToUse }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || json.success === false) {
+        return {
+          success: false,
+          error: json.error || 'Bạn không có quyền chỉnh sửa hoặc xóa nội dung môn học này. Vui lòng liên hệ quản trị viên.',
+        };
+      }
+      syncedToSheets = Boolean(json.syncedToSheets);
+    } catch (err) {
+      console.warn('Central server save failed', err);
+    }
+
+    // 2. Update local cache ONLY AFTER server validation passes
     try {
       const localData = localStorage.getItem(localKey);
       let list: LogPeriodEntry[] = localData ? JSON.parse(localData) : [];
@@ -673,38 +696,7 @@ export class ApiService {
       console.error('Failed to save to local storage', e);
     }
 
-    // 1. Send to central backend server
-    try {
-      await fetch('/api/period', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entry }),
-      });
-    } catch (err) {
-      console.warn('Central server save failed', err);
-    }
-
-    // 2. Secondary sync to Google Sheets (if configured)
-    if (config.scriptUrl && config.scriptUrl.trim()) {
-      try {
-        await fetch(config.scriptUrl.trim(), {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'savePeriod',
-            entry: {
-              ...entry,
-              updatedAt: new Date().toLocaleString('vi-VN'),
-            },
-          }),
-        });
-      } catch (err: unknown) {
-        return { success: true, error: 'Đã lưu máy chủ trung tâm (chưa đồng bộ Google Sheet)' };
-      }
-    }
-
-    return { success: true };
+    return { success: true, syncedToSheets };
   }
 
   // Delete a cluster
@@ -712,9 +704,29 @@ export class ApiService {
     weekNumber: number,
     dayOfWeek: number,
     clusterIndex: number,
-    config: SchoolConfig
-  ): Promise<{ success: boolean }> {
+    config: SchoolConfig,
+    userEmail?: string
+  ): Promise<{ success: boolean; error?: string }> {
     const localKey = `${STORAGE_KEY_PREFIX_WEEK}${weekNumber}`;
+    const emailToUse = userEmail || ApiService.loadCurrentUser().email;
+
+    // Send to central server
+    try {
+      const res = await fetch('/api/delete-cluster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weekNumber, dayOfWeek, clusterIndex, userEmail: emailToUse }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.success === false) {
+        return {
+          success: false,
+          error: json.error || 'Bạn không có quyền xóa cụm môn này. Vui lòng liên hệ quản trị viên.',
+        };
+      }
+    } catch (e) {
+      console.warn('Central server delete cluster failed', e);
+    }
 
     try {
       const localData = localStorage.getItem(localKey);
@@ -733,36 +745,6 @@ export class ApiService {
       console.error('Failed to delete cluster locally', e);
     }
 
-    // Send to central server
-    try {
-      await fetch('/api/delete-cluster', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weekNumber, dayOfWeek, clusterIndex }),
-      });
-    } catch (e) {
-      console.warn('Central server delete cluster failed', e);
-    }
-
-    // Sync to Google Sheets
-    if (config.scriptUrl && config.scriptUrl.trim()) {
-      try {
-        await fetch(config.scriptUrl.trim(), {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'deleteCluster',
-            weekNumber,
-            dayOfWeek,
-            clusterIndex,
-          }),
-        });
-      } catch (e) {
-        console.warn('Could not sync cluster delete to Google Sheets', e);
-      }
-    }
-
     return { success: true };
   }
 
@@ -770,40 +752,31 @@ export class ApiService {
   static async saveWeekData(
     weekNumber: number,
     entries: LogPeriodEntry[],
-    config: SchoolConfig
+    config: SchoolConfig,
+    userEmail?: string
   ): Promise<{ success: boolean; error?: string }> {
     const localKey = `${STORAGE_KEY_PREFIX_WEEK}${weekNumber}`;
-    localStorage.setItem(localKey, JSON.stringify(entries));
+    const emailToUse = userEmail || ApiService.loadCurrentUser().email;
 
     // 1. Send to central backend server
     try {
-      await fetch(`/api/weeks/${weekNumber}`, {
+      const res = await fetch(`/api/weeks/${weekNumber}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries }),
+        body: JSON.stringify({ entries, userEmail: emailToUse }),
       });
+      const json = await res.json();
+      if (!res.ok || json.success === false) {
+        return {
+          success: false,
+          error: json.error || 'Bạn không có quyền chỉnh sửa nội dung thuộc môn học khác.',
+        };
+      }
     } catch (err) {
       console.warn('Central server batch save failed', err);
     }
 
-    // 2. Secondary sync to Google Sheets
-    if (config.scriptUrl && config.scriptUrl.trim()) {
-      try {
-        await fetch(config.scriptUrl.trim(), {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'saveWeek',
-            weekNumber,
-            entries,
-          }),
-        });
-      } catch (err) {
-        return { success: true, error: 'Đã lưu máy chủ trung tâm (chưa đồng bộ Google Sheet)' };
-      }
-    }
-
+    localStorage.setItem(localKey, JSON.stringify(entries));
     return { success: true };
   }
 
@@ -811,40 +784,28 @@ export class ApiService {
   static async toggleLockWeek(
     weekNumber: number,
     isLocked: boolean,
-    config: SchoolConfig
+    config: SchoolConfig,
+    userEmail?: string
   ): Promise<SchoolConfig> {
+    const emailToUse = userEmail || ApiService.loadCurrentUser().email;
     const newConfig: SchoolConfig = {
       ...config,
       lockedWeeks: {
-        ...config.lockedWeeks,
+        ...(config.lockedWeeks || {}),
         [weekNumber]: isLocked,
       },
     };
     ApiService.saveConfig(newConfig);
 
     // Sync to central backend
-    fetch('/api/lock-week', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ weekNumber, isLocked }),
-    }).catch((err) => console.warn('Could not sync lock to central server', err));
-
-    // Secondary sync to Google Sheets
-    if (config.scriptUrl && config.scriptUrl.trim()) {
-      try {
-        fetch(config.scriptUrl.trim(), {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'lockWeek',
-            weekNumber,
-            isLocked,
-          }),
-        });
-      } catch (e) {
-        console.warn('Could not sync lock status to Google Sheets', e);
-      }
+    try {
+      await fetch('/api/lock-week', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weekNumber, isLocked, userEmail: emailToUse }),
+      });
+    } catch (e) {
+      console.warn('Could not sync locked week state to server', e);
     }
 
     return newConfig;
