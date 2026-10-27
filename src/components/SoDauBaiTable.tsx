@@ -23,7 +23,7 @@ import {
   CurrentUser,
 } from '../types';
 import { checkIsAdmin } from '../constants/initialData';
-import { canUserEditEntry, getTeacherAssignedSubject } from '../utils/permissionUtils';
+import { canUserEditEntry, getTeacherAssignedSubject, checkDuplicatePPCTLesson } from '../utils/permissionUtils';
 import { getDateForDayOfWeek } from '../utils/dateUtils';
 
 interface SoDauBaiTableProps {
@@ -131,11 +131,25 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
 
   const handleSaveDraft = async () => {
     if (!draftEntry) return;
+
+    // Check for duplicate PPCT lesson number for the same subject
+    if (draftEntry.subject && draftEntry.ppctLesson && draftEntry.ppctLesson.trim()) {
+      const dupCheck = checkDuplicatePPCTLesson(entries, draftEntry);
+      if (dupCheck.isDuplicate) {
+        alert(
+          `CẢNH BÁO: DỮ LIỆU TIẾT PPCT BỊ TRÙNG!\n\n${dupCheck.warningMessage || `Tiết PPCT ${draftEntry.ppctLesson} của môn ${draftEntry.subject} đã được ghi vào ${dupCheck.duplicateInfo}.`}`
+        );
+        return; // STRICTLY BLOCK SAVE AND RETAIN TYPED INPUTS
+      }
+    }
+
     setSavingId(draftEntry.id);
     try {
       await onSaveEntry(draftEntry);
       setEditingId(null);
       setDraftEntry(null);
+    } catch (err: any) {
+      alert(err.message || 'Không thể lưu bản ghi. Vui lòng kiểm tra lại.');
     } finally {
       setSavingId(null);
     }
@@ -260,8 +274,8 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
         </div>
       </div>
 
-      {/* Super Admin Status Banner */}
-      {(currentUser.role === 'admin' || checkIsAdmin(currentUser.email)) && (
+      {/* Super Admin / Teacher Status Banner */}
+      {(currentUser.role === 'admin' || checkIsAdmin(currentUser.email)) ? (
         <div className="bg-emerald-50 border border-emerald-300 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-emerald-950 font-medium shadow-2xs">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse" />
@@ -281,6 +295,18 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
               Bấm để xem tất cả (Bỏ lọc)
             </button>
           )}
+        </div>
+      ) : (
+        <div className="bg-blue-50 border border-blue-300 rounded-xl px-4 py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-blue-950 font-medium shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse shrink-0" />
+            <span>
+              <strong>TÀI KHOẢN GIÁO VIÊN:</strong> Bạn đang xem sổ đầu bài của <strong>tất cả giáo viên & môn học</strong> trong trường (Tuần {currentWeek}). Bạn chỉ có quyền nhập/sửa môn <strong className="text-blue-900 font-extrabold">{getTeacherAssignedSubject(currentUser, teachers) || currentUser.assignedSubject || 'được phân công'}</strong>.
+            </span>
+          </div>
+          <span className="text-[11px] text-blue-700 font-semibold bg-white/80 border border-blue-200 px-2 py-0.5 rounded-md shrink-0">
+            * Tên bài học được phép trùng lặp lại cho các tiết dạy cùng bài
+          </span>
         </div>
       )}
 
@@ -718,18 +744,38 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
                         {/* Cột 4: Tiết PPCT */}
                         <td className="py-2 px-1 border-r border-slate-300 text-center align-middle font-mono">
                           {isEditing ? (
-                            <input
-                              type="text"
-                              value={active.ppctLesson}
-                              placeholder="5"
-                              onChange={(e) =>
-                                setDraftEntry({
-                                  ...draftEntry!,
-                                  ppctLesson: e.target.value,
-                                })
-                              }
-                              className="w-full text-center px-1 py-1 bg-white border border-blue-400 rounded text-xs font-sans"
-                            />
+                            (() => {
+                              const dupResult = checkDuplicatePPCTLesson(entries, active);
+                              const isDup = dupResult.isDuplicate;
+                              return (
+                                <div className="relative group min-w-[70px]">
+                                  <input
+                                    type="text"
+                                    value={active.ppctLesson}
+                                    placeholder="5"
+                                    onChange={(e) =>
+                                      setDraftEntry({
+                                        ...draftEntry!,
+                                        ppctLesson: e.target.value,
+                                      })
+                                    }
+                                    className={`w-full text-center px-1 py-1 rounded text-xs font-sans transition-all ${
+                                      isDup
+                                        ? 'border-2 border-red-600 bg-red-50 text-red-950 font-bold focus:ring-2 focus:ring-red-500 shadow-2xs'
+                                        : 'border border-blue-400 bg-white text-slate-900 font-semibold'
+                                    }`}
+                                  />
+                                  {isDup && (
+                                    <div className="mt-1 text-[10px] text-red-800 font-bold bg-red-100 border border-red-300 p-1 rounded shadow-2xs text-left">
+                                      ⚠️ TRÙNG PPCT:
+                                      <div className="font-normal text-[9px] text-red-900 mt-0.5 leading-tight">
+                                        {dupResult.duplicateInfo}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()
                           ) : (
                             <span className="font-semibold text-slate-800">
                               {entry.ppctLesson || ''}

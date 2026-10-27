@@ -158,6 +158,27 @@ function savePeriodToRaw(ss, entry) {
     }
   }
 
+  // Check duplicate PPCT on Google Sheet before writing
+  if (entry.subject && entry.ppctLesson && String(entry.ppctLesson).trim()) {
+    var subjLower = String(entry.subject).trim().toLowerCase();
+    var ppctRaw = String(entry.ppctLesson).trim().toLowerCase();
+    var ppctDigits = ppctRaw.replace(/\\D/g, "");
+
+    for (var i = 1; i < data.length; i++) {
+      if (targetRow > 1 && i === targetRow - 1) continue; // Skip same target row
+      var rowSubj = String(data[i][5] || "").trim().toLowerCase();
+      var rowPpct = String(data[i][6] || "").trim().toLowerCase();
+      var rowPpctDigits = rowPpct.replace(/\\D/g, "");
+
+      if (rowSubj === subjLower && rowPpct) {
+        var isDup = (ppctDigits && rowPpctDigits) ? (ppctDigits === rowPpctDigits) : (ppctRaw === rowPpct);
+        if (isDup) {
+          throw new Error("CẢNH BÁO: DỮ LIỆU TIẾT PPCT BỊ TRÙNG TRÊN GOOGLE SHEETS! Tiết PPCT " + entry.ppctLesson + " của môn " + entry.subject + " đã tồn tại ở Tuần " + data[i][0] + " Thứ " + data[i][2]);
+        }
+      }
+    }
+  }
+
   var rowValues = [
     weekNum,
     entry.dateStr || "",

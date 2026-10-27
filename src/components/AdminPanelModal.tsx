@@ -56,7 +56,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [draftTeachers, setDraftTeachers] = useState<TeacherAssignment[]>([...teachers]);
   const [draftStudents, setDraftStudents] = useState<Student[]>([...students]);
 
-  const [activeTab, setActiveTab] = useState<'config' | 'teachers' | 'locks' | 'students' | 'progress' | 'matrix'>('progress');
+  const [activeTab, setActiveTab] = useState<'config' | 'teachers' | 'locks' | 'students' | 'progress' | 'matrix' | 'audit'>('progress');
   const [selectedProgressWeek, setSelectedProgressWeek] = useState<number>(5);
   const [progressItems, setProgressItems] = useState<import('../types').TeacherProgressItem[]>([]);
   const [isLoadingProgress, setIsLoadingProgress] = useState(false);
@@ -64,6 +64,36 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [progressStatusFilter, setProgressStatusFilter] = useState<'ALL' | 'COMPLETED' | 'INCOMPLETE' | 'NOT_ENTERED'>('ALL');
   const [onlyMissing, setOnlyMissing] = useState(false);
   const [matrixCellDetail, setMatrixCellDetail] = useState<{ teacherName: string; subject: string; week: number; item?: import('../types').TeacherProgressItem } | null>(null);
+
+  // Audit state
+  const [auditData, setAuditData] = useState<{
+    totalEnteredRecords: number;
+    verifiedCount: number;
+    unverifiedCount: number;
+    unverifiedEntries: any[];
+    verifiedEntries: any[];
+  }>({ totalEnteredRecords: 0, verifiedCount: 0, unverifiedCount: 0, unverifiedEntries: [], verifiedEntries: [] });
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+  const [auditWeekFilter, setAuditWeekFilter] = useState<number | 'ALL'>('ALL');
+  const [auditSubjectFilter, setAuditSubjectFilter] = useState<string>('');
+
+  const loadAuditData = React.useCallback(() => {
+    setIsLoadingAudit(true);
+    ApiService.fetchAuditEntries()
+      .then((data) => {
+        if (data.success) {
+          setAuditData(data);
+        }
+      })
+      .catch((err) => console.warn('Error fetching audit entries', err))
+      .finally(() => setIsLoadingAudit(false));
+  }, []);
+
+  React.useEffect(() => {
+    if (activeTab === 'audit') {
+      loadAuditData();
+    }
+  }, [activeTab, loadAuditData]);
 
   // Load progress items when week or tab changes
   React.useEffect(() => {
@@ -511,6 +541,19 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             <GraduationCap className="w-4 h-4" />
             <span>Danh sách HS ({draftStudents.length})</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('audit')}
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'audit'
+                ? 'border-blue-900 text-blue-950 bg-white'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Database className="w-4 h-4 text-amber-600" />
+            <span>Kiểm Tra Nguồn Gốc Dữ Liệu (Tuần 1-35)</span>
+          </button>
         </div>
 
 
@@ -863,6 +906,244 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB AUDIT: KIỂM TRA NGUỒN GỐC DỮ LIỆU TUẦN 1 - 35 */}
+          {activeTab === 'audit' && (
+            <div className="space-y-5">
+              <div className="p-4 bg-gradient-to-r from-amber-900 to-slate-900 text-white rounded-2xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wide flex items-center gap-2">
+                    <Database className="w-5 h-5 text-amber-300" />
+                    <span>KIỂM TRA & XÁC MINH NGUỒN GỐC DỮ LIỆU SỔ ĐẦU BÀI (TUẦN 1 - 35)</span>
+                  </h3>
+                  <p className="text-xs text-amber-200 mt-0.5">
+                    Phân biệt dữ liệu do Giáo viên thực tế nhập với dữ liệu tạo tự động. Bảo tồn tuyệt đối dữ liệu cũ, chỉ SUPER_ADMIN mới có quyền xác minh.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={loadAuditData}
+                    className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAudit ? 'animate-spin' : ''}`} />
+                    <span>Tải lại dữ liệu</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm('Xác nhận toàn bộ dữ liệu từ Tuần 1 đến Tuần 35 là dữ liệu chính thức do giáo viên nhập?')) {
+                        const res = await ApiService.verifyAuditEntry('vandungtpdn1976@gmail.com', 'verify_all_unverified');
+                        if (res.success) {
+                          alert(res.message || 'Đã xác minh toàn bộ dữ liệu thành công!');
+                          loadAuditData();
+                        } else {
+                          alert(res.error || 'Lỗi xác minh.');
+                        }
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Xác nhận tất cả là hợp lệ</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-2xl">
+                  <span className="text-xs font-semibold text-slate-500 block">Tổng số tiết đã có dữ liệu (Tuần 1 - 35)</span>
+                  <span className="text-2xl font-extrabold text-blue-950 font-mono mt-0.5 block">
+                    {auditData.totalEnteredRecords}
+                  </span>
+                  <span className="text-[11px] text-blue-700 block">Tiết đã nhập</span>
+                </div>
+
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                  <span className="text-xs font-semibold text-emerald-800 block">Đã xác minh GV thực tế nhập</span>
+                  <span className="text-2xl font-extrabold text-emerald-700 font-mono mt-0.5 block">
+                    {auditData.verifiedCount}
+                  </span>
+                  <span className="text-[11px] text-emerald-600 block">Bản ghi hợp lệ</span>
+                </div>
+
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl">
+                  <span className="text-xs font-semibold text-amber-800 block">Chưa xác minh nguồn gốc (Cần BGH duyệt)</span>
+                  <span className="text-2xl font-extrabold text-amber-700 font-mono mt-0.5 block">
+                    {auditData.unverifiedCount}
+                  </span>
+                  <span className="text-[11px] text-amber-600 block">Cần kiểm tra</span>
+                </div>
+              </div>
+
+              {/* Filter Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-slate-800">Lọc theo Tuần:</span>
+                  <select
+                    value={auditWeekFilter}
+                    onChange={(e) => setAuditWeekFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+                    className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white font-bold"
+                  >
+                    <option value="ALL">Toàn bộ 35 Tuần</option>
+                    {weeksList.map((w) => (
+                      <option key={w} value={w}>
+                        Tuần {w < 10 ? '0' + w : w}
+                      </option>
+                    ))}
+                  </select>
+
+                  <span className="text-xs font-bold text-slate-800 ml-2">Lọc môn:</span>
+                  <select
+                    value={auditSubjectFilter}
+                    onChange={(e) => setAuditSubjectFilter(e.target.value)}
+                    className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white font-bold"
+                  >
+                    <option value="">Tất cả môn</option>
+                    {draftConfig.subjectsList.map((s) => (
+                      <option key={s} value={s}>
+                        Môn {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <span className="text-xs text-slate-600">
+                  Đang hiển thị{' '}
+                  <strong className="text-slate-900">
+                    {
+                      auditData.unverifiedEntries.filter((e) => {
+                        if (auditWeekFilter !== 'ALL' && e.weekNumber !== auditWeekFilter) return false;
+                        if (auditSubjectFilter && e.subject !== auditSubjectFilter) return false;
+                        return true;
+                      }).length
+                    }
+                  </strong>{' '}
+                  bản ghi chưa xác minh
+                </span>
+              </div>
+
+              {/* Table of Unverified Entries */}
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs max-h-[50vh] overflow-y-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10">
+                    <tr>
+                      <th className="py-2.5 px-3 border-r border-slate-200 w-10 text-center">STT</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200 w-16 text-center">Tuần</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200 w-24">Thứ, ngày</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200 w-12 text-center">Tiết</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200 w-24">Môn học</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200 w-20 text-center">Tiết PPCT</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200">Tên bài, nội dung công việc</th>
+                      <th className="py-2.5 px-3 border-r border-slate-200 w-32">Ký tên ghi chép</th>
+                      <th className="py-2.5 px-3 text-center w-36">Thao tác BGH</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 font-medium">
+                    {auditData.unverifiedEntries.filter((e) => {
+                      if (auditWeekFilter !== 'ALL' && e.weekNumber !== auditWeekFilter) return false;
+                      if (auditSubjectFilter && e.subject !== auditSubjectFilter) return false;
+                      return true;
+                    }).length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-8 text-center text-slate-500 italic">
+                          🎉 Không có bản ghi nào chưa xác minh nguồn gốc. Tất cả dữ liệu Sổ đầu bài đều hợp lệ!
+                        </td>
+                      </tr>
+                    ) : (
+                      auditData.unverifiedEntries
+                        .filter((e) => {
+                          if (auditWeekFilter !== 'ALL' && e.weekNumber !== auditWeekFilter) return false;
+                          if (auditSubjectFilter && e.subject !== auditSubjectFilter) return false;
+                          return true;
+                        })
+                        .map((item, idx) => (
+                          <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-2 px-3 border-r border-slate-200 text-center font-mono font-bold text-slate-500">
+                              {idx + 1}
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200 text-center font-bold text-blue-900">
+                              Tuần {item.weekNumber}
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200">
+                              Thứ {item.dayOfWeek} ({item.dateStr || '-'})
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200 text-center font-bold">
+                              {item.period}
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200 font-bold text-blue-950">
+                              {item.subject || '-'}
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200 text-center font-mono">
+                              {item.ppctLesson || '-'}
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200 text-slate-800">
+                              {item.lessonTitle || <span className="text-slate-300 italic">(Trống)</span>}
+                            </td>
+                            <td className="py-2 px-3 border-r border-slate-200">
+                              <div>{item.teacherSignature || <span className="text-slate-400 italic">Chưa ký</span>}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">{item.teacherEmail || ''}</div>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const res = await ApiService.verifyAuditEntry(
+                                      'vandungtpdn1976@gmail.com',
+                                      'verify',
+                                      item.id,
+                                      item.weekNumber
+                                    );
+                                    if (res.success) {
+                                      loadAuditData();
+                                    } else {
+                                      alert(res.error || 'Lỗi xác minh.');
+                                    }
+                                  }}
+                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer shadow-2xs"
+                                  title="Xác nhận bản ghi này do giáo viên thực tế nhập"
+                                >
+                                  <Check className="w-3 h-3" />
+                                  <span>Duyệt</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (window.confirm('Làm trống bản ghi này trong sổ đầu bài?')) {
+                                      const res = await ApiService.verifyAuditEntry(
+                                        'vandungtpdn1976@gmail.com',
+                                        'delete',
+                                        item.id,
+                                        item.weekNumber
+                                      );
+                                      if (res.success) {
+                                        loadAuditData();
+                                      } else {
+                                        alert(res.error || 'Lỗi làm trống.');
+                                      }
+                                    }
+                                  }}
+                                  className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                                  title="Làm trống bản ghi rỗng/nghi vấn"
+                                >
+                                  <Trash2 className="w-3 h-3 text-red-600" />
+                                  <span>Xóa</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

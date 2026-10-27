@@ -8,6 +8,14 @@
     "updatedAt": "2026-10-25T07:03:42.300Z"
   },
   {
+    "email": "thenamdt@gmail.com",
+    "password": "vandung@2026",
+    "isFirstLogin": false,
+    "status": "ACTIVE",
+    "role": "SUPER_ADMIN",
+    "updatedAt": "2026-10-25T07:03:42.300Z"
+  },
+  {
     "email": "vovandungdx@gmail.com",
     "password": "vandung@2026",
     "isFirstLogin": false,
@@ -120,7 +128,7 @@
     "updatedAt": "2026-10-25T07:03:42.300Z"
   },
   {
-    "email": "ha.ttt@gmail.com",
+    "email": "tranthanhhaquangbinh@gmail.com",
     "password": "ptdtnt@2026",
     "isFirstLogin": true,
     "status": "ACTIVE",
@@ -168,7 +176,7 @@
     "updatedAt": "2026-10-25T07:03:42.301Z"
   },
   {
-    "email": "huyen.htt@gmail.com",
+    "email": "hahuyendtnt@gmail.com",
     "password": "ptdtnt@2026",
     "isFirstLogin": true,
     "status": "ACTIVE",

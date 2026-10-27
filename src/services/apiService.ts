@@ -15,6 +15,10 @@ import {
   SAMPLE_DECISION_108_TEACHERS,
   createEmptyWeekEntries,
 } from '../constants/initialData';
+import {
+  normalizeLogPeriodEntry,
+  normalizeWeekEntries,
+} from '../utils/dateUtils';
 
 const STORAGE_KEY_PREFIX_WEEK = 'sdb_week_';
 const STORAGE_KEY_CONFIG = 'sdb_config';
@@ -26,24 +30,16 @@ const STORAGE_KEY_AUTH_SESSION = 'sdb_authenticated_session';
 
 export class ApiService {
   static checkIsAuthenticated(): boolean {
-    try {
-      const isAuth = sessionStorage.getItem(STORAGE_KEY_AUTH_SESSION);
-      if (isAuth === 'true') return true;
-      const localAuth = localStorage.getItem(STORAGE_KEY_AUTH_SESSION);
-      return localAuth === 'true';
-    } catch {
-      return false;
-    }
+    // Per security requirements: Always require login on page reload / initial load / new tab
+    return false;
   }
 
   static setAuthenticatedSession(authenticated: boolean): void {
     try {
-      if (authenticated) {
-        sessionStorage.setItem(STORAGE_KEY_AUTH_SESSION, 'true');
-        localStorage.setItem(STORAGE_KEY_AUTH_SESSION, 'true');
-      } else {
+      if (!authenticated) {
         sessionStorage.removeItem(STORAGE_KEY_AUTH_SESSION);
         localStorage.removeItem(STORAGE_KEY_AUTH_SESSION);
+        localStorage.removeItem(STORAGE_KEY_CURRENT_USER);
       }
     } catch (e) {
       console.warn('Error setting auth session', e);
@@ -489,12 +485,19 @@ export class ApiService {
   }
 
   // Helper to merge two lists of period entries preserving non-empty lesson data
-  static mergeEntriesLists(primary: LogPeriodEntry[], secondary: LogPeriodEntry[]): LogPeriodEntry[] {
-    if (!primary || primary.length === 0) return secondary || [];
-    if (!secondary || secondary.length === 0) return primary;
+  static mergeEntriesLists(
+    primary: LogPeriodEntry[],
+    secondary: LogPeriodEntry[],
+    weekNumber: number = 1,
+    startDateStr: string = DEFAULT_CONFIG.weekOneStartDate
+  ): LogPeriodEntry[] {
+    const normPrimary = (primary || []).map((e) => normalizeLogPeriodEntry(e, weekNumber, startDateStr));
+    const normSecondary = (secondary || []).map((e) => normalizeLogPeriodEntry(e, weekNumber, startDateStr));
+
+    if (normPrimary.length === 0) return normSecondary;
+    if (normSecondary.length === 0) return normPrimary;
 
     const map = new Map<string, LogPeriodEntry>();
-    const getKey = (e: LogPeriodEntry) => `d${e.dayOfWeek}_c${e.clusterIndex || 1}_p${e.period}`;
     const hasContent = (e: LogPeriodEntry) =>
       Boolean(
         (e.subject && e.subject.trim()) ||
@@ -504,28 +507,26 @@ export class ApiService {
         (e.absentCount && e.absentCount > 0)
       );
 
-    for (const e of secondary) {
-      map.set(getKey(e), e);
+    for (const e of normSecondary) {
+      map.set(e.id, e);
     }
 
-    for (const e of primary) {
-      const key = getKey(e);
-      const existing = map.get(key);
-
+    for (const e of normPrimary) {
+      const existing = map.get(e.id);
       if (!existing) {
-        map.set(key, e);
+        map.set(e.id, e);
       } else {
         if (hasContent(e) && !hasContent(existing)) {
-          map.set(key, e);
+          map.set(e.id, e);
         } else if (hasContent(e) && hasContent(existing)) {
-          map.set(key, e);
+          map.set(e.id, e);
         }
       }
     }
 
     return Array.from(map.values()).sort((a, b) => {
       if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
-      if ((a.clusterIndex || 1) !== (b.clusterIndex || 1)) return (a.clusterIndex || 1) - (b.clusterIndex || 1);
+      if (a.clusterIndex !== b.clusterIndex) return a.clusterIndex - b.clusterIndex;
       return a.period - b.period;
     });
   }
@@ -559,7 +560,7 @@ export class ApiService {
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
-          currentResult = ApiService.mergeEntriesLists(json.data, currentResult);
+          currentResult = ApiService.mergeEntriesLists(json.data, currentResult, weekNumber, config.weekOneStartDate);
         }
       }
     } catch (e) {
@@ -585,7 +586,7 @@ export class ApiService {
         if (res.ok) {
           const json = await res.json();
           if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
-            currentResult = ApiService.mergeEntriesLists(json.data, currentResult);
+            currentResult = ApiService.mergeEntriesLists(json.data, currentResult, weekNumber, config.weekOneStartDate);
           }
         }
       } catch (e) {
@@ -598,6 +599,7 @@ export class ApiService {
       currentResult = createEmptyWeekEntries(weekNumber, config.weekOneStartDate);
     }
 
+    currentResult = normalizeWeekEntries(currentResult, weekNumber, config.weekOneStartDate);
     localStorage.setItem(localKey, JSON.stringify(currentResult));
     return currentResult;
   }
@@ -605,6 +607,7 @@ export class ApiService {
   // Silent poll for real-time background sync
   static async pollWeekData(weekNumber: number): Promise<LogPeriodEntry[] | null> {
     try {
+      const config = ApiService.loadConfig();
       const res = await fetch(`/api/weeks/${weekNumber}`, {
         headers: { Accept: 'application/json' },
       });
@@ -617,9 +620,10 @@ export class ApiService {
           if (localData) {
             try { cached = JSON.parse(localData); } catch {}
           }
-          const merged = ApiService.mergeEntriesLists(json.data, cached);
-          localStorage.setItem(localKey, JSON.stringify(merged));
-          return merged;
+          const merged = ApiService.mergeEntriesLists(json.data, cached, weekNumber, config.weekOneStartDate);
+          const normalized = normalizeWeekEntries(merged, weekNumber, config.weekOneStartDate);
+          localStorage.setItem(localKey, JSON.stringify(normalized));
+          return normalized;
         }
       }
     } catch {
@@ -634,7 +638,8 @@ export class ApiService {
     config: SchoolConfig,
     userEmail?: string
   ): Promise<{ success: boolean; error?: string; syncedToSheets?: boolean }> {
-    const weekNumber = entry.weekNumber;
+    const normEntry = normalizeLogPeriodEntry(entry, entry.weekNumber, config.weekOneStartDate);
+    const weekNumber = normEntry.weekNumber;
     const localKey = `${STORAGE_KEY_PREFIX_WEEK}${weekNumber}`;
     const emailToUse = userEmail || ApiService.loadCurrentUser().email;
 
@@ -644,7 +649,7 @@ export class ApiService {
       const res = await fetch('/api/period', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entry, userEmail: emailToUse }),
+        body: JSON.stringify({ entry: normEntry, userEmail: emailToUse }),
       });
 
       const json = await res.json();
@@ -667,31 +672,14 @@ export class ApiService {
         list = createEmptyWeekEntries(weekNumber, config.weekOneStartDate);
       }
 
-      const entryDay = Number(entry.dayOfWeek);
-      const entryCluster = Number(entry.clusterIndex || 1);
-      const entryPeriod = Number(entry.period);
-
-      const index = list.findIndex(
-        (e) =>
-          Number(e.dayOfWeek) === entryDay &&
-          Number(e.clusterIndex || 1) === entryCluster &&
-          Number(e.period) === entryPeriod
-      );
-
-      const entryWithDate: LogPeriodEntry = {
-        ...entry,
-        dayOfWeek: entryDay,
-        clusterIndex: entryCluster,
-        period: entryPeriod,
-        updatedAt: new Date().toLocaleString('vi-VN'),
-      };
-
+      const index = list.findIndex((e) => e.id === normEntry.id);
       if (index >= 0) {
-        list[index] = entryWithDate;
+        list[index] = normEntry;
       } else {
-        list.push(entryWithDate);
+        list.push(normEntry);
       }
-      localStorage.setItem(localKey, JSON.stringify(list));
+      const normalizedList = normalizeWeekEntries(list, weekNumber, config.weekOneStartDate);
+      localStorage.setItem(localKey, JSON.stringify(normalizedList));
     } catch (e) {
       console.error('Failed to save to local storage', e);
     }
@@ -739,7 +727,8 @@ export class ApiService {
               (Number(e.clusterIndex) || 1) === Number(clusterIndex)
             )
         );
-        localStorage.setItem(localKey, JSON.stringify(filtered));
+        const normalizedList = normalizeWeekEntries(filtered, weekNumber, config.weekOneStartDate);
+        localStorage.setItem(localKey, JSON.stringify(normalizedList));
       }
     } catch (e) {
       console.error('Failed to delete cluster locally', e);
@@ -757,13 +746,14 @@ export class ApiService {
   ): Promise<{ success: boolean; error?: string }> {
     const localKey = `${STORAGE_KEY_PREFIX_WEEK}${weekNumber}`;
     const emailToUse = userEmail || ApiService.loadCurrentUser().email;
+    const normalizedEntries = normalizeWeekEntries(entries, weekNumber, config.weekOneStartDate);
 
     // 1. Send to central backend server
     try {
       const res = await fetch(`/api/weeks/${weekNumber}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries, userEmail: emailToUse }),
+        body: JSON.stringify({ entries: normalizedEntries, userEmail: emailToUse }),
       });
       const json = await res.json();
       if (!res.ok || json.success === false) {
@@ -776,7 +766,7 @@ export class ApiService {
       console.warn('Central server batch save failed', err);
     }
 
-    localStorage.setItem(localKey, JSON.stringify(entries));
+    localStorage.setItem(localKey, JSON.stringify(normalizedEntries));
     return { success: true };
   }
 
@@ -885,6 +875,59 @@ export class ApiService {
     }
 
     return result;
+  }
+
+  // Audit data across Weeks 1 to 35
+  static async fetchAuditEntries(): Promise<{
+    success: boolean;
+    totalEnteredRecords: number;
+    verifiedCount: number;
+    unverifiedCount: number;
+    unverifiedEntries: (LogPeriodEntry & { origin: string; isTeacherVerified: boolean })[];
+    verifiedEntries: (LogPeriodEntry & { origin: string; isTeacherVerified: boolean })[];
+  }> {
+    try {
+      const res = await fetch('/api/admin/audit-entries');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          return json;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch audit entries', e);
+    }
+    return {
+      success: false,
+      totalEnteredRecords: 0,
+      verifiedCount: 0,
+      unverifiedCount: 0,
+      unverifiedEntries: [],
+      verifiedEntries: [],
+    };
+  }
+
+  // Action to verify or clear unverified entry
+  static async verifyAuditEntry(
+    userEmail: string,
+    action: 'verify' | 'delete' | 'verify_all_unverified',
+    entryId?: string,
+    weekNumber?: number
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      const res = await fetch('/api/admin/verify-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entryId, weekNumber, action, userEmail }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        return { success: true, message: json.message };
+      }
+      return { success: false, error: json.error || 'Thao tác không thành công.' };
+    } catch (e: any) {
+      return { success: false, error: 'Lỗi kết nối máy chủ: ' + (e.message || String(e)) };
+    }
   }
 }
 

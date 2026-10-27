@@ -136,7 +136,7 @@ export const SAMPLE_DECISION_108_TEACHERS: TeacherAssignment[] = [
     teacherName: 'Trần Thị Thanh Hà',
     position: 'Tổ phó',
     subject: 'Ngữ văn',
-    email: 'ha.ttt@gmail.com',
+    email: 'tranthanhhaquangbinh@gmail.com',
     phone: '0905123013',
   },
 
@@ -167,6 +167,15 @@ export const SAMPLE_DECISION_108_TEACHERS: TeacherAssignment[] = [
   },
 
   // 17 & 18: Môn Lịch sử (2 GV)
+  {
+    id: 'gv_bgh_nam',
+    teacherName: 'Phạm Thế Nam',
+    position: 'Phó Hiệu trưởng',
+    subject: 'ALL',
+    email: 'thenamdt@gmail.com',
+    phone: '0905123999',
+    role: 'SUPER_ADMIN',
+  },
   {
     id: 'gv_17',
     teacherName: 'Võ Văn Dũng (BGH)',
@@ -219,7 +228,7 @@ export const SAMPLE_DECISION_108_TEACHERS: TeacherAssignment[] = [
     teacherName: 'Hà Thị Thanh Huyền',
     position: 'Giáo viên',
     subject: 'GDKTPL',
-    email: 'huyen.htt@gmail.com',
+    email: 'hahuyendtnt@gmail.com',
     phone: '0912123789',
   },
 
@@ -265,16 +274,15 @@ export const DEFAULT_CONFIG: SchoolConfig = {
   publicAppUrl: '',
 };
 
-export const ADMIN_EMAILS: string[] = ['vandungtpdn1976@gmail.com'];
+export const ADMIN_EMAILS: string[] = ['vandungtpdn1976@gmail.com', 'thenamdt@gmail.com'];
 
 export function checkIsAdmin(email?: string): boolean {
   if (!email) return false;
   const lower = email.trim().toLowerCase();
   return (
     lower === 'vandungtpdn1976@gmail.com' ||
-    ADMIN_EMAILS.some((adm) => adm.toLowerCase() === lower) ||
-    lower.includes('admin') ||
-    lower.includes('bgh')
+    lower === 'thenamdt@gmail.com' ||
+    ADMIN_EMAILS.some((adm) => adm.toLowerCase() === lower)
   );
 }
 

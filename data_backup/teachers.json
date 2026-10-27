@@ -100,7 +100,7 @@
     "teacherName": "Trần Thị Thanh Hà",
     "position": "Tổ phó",
     "subject": "Ngữ văn",
-    "email": "ha.ttt@gmail.com",
+    "email": "tranthanhhaquangbinh@gmail.com",
     "phone": "0905123013"
   },
   {
@@ -129,11 +129,30 @@
   },
   {
     "id": "gv_17",
+    "teacherName": "Võ Văn Dũng (BGH)",
+    "position": "BGH / Quản trị viên",
+    "subject": "Sử",
+    "email": "vandungtpdn1976@gmail.com",
+    "phone": "0905890123",
+    "role": "SUPER_ADMIN"
+  },
+  {
+    "id": "gv_17_b",
     "teacherName": "Võ Văn Dũng",
     "position": "Tổ trưởng",
     "subject": "Sử",
-    "email": "vandungtpdn1976@gmail.com",
-    "phone": "0905890123"
+    "email": "vovandungdx@gmail.com",
+    "phone": "0905890123",
+    "role": "TEACHER"
+  },
+  {
+    "id": "gv_17_c",
+    "teacherName": "Võ Văn Dũng",
+    "position": "Tổ trưởng",
+    "subject": "Sử",
+    "email": "voandungdx@gmail.com",
+    "phone": "0905890123",
+    "role": "TEACHER"
   },
   {
     "id": "gv_18",
@@ -152,27 +171,28 @@
     "phone": "0905901234"
   },
   {
-    "id": "gv_20",
-    "teacherName": "Lục Hữu Bằng",
-    "position": "Giáo viên",
-    "subject": "Địa lí",
-    "email": "bang.lh@gmail.com",
-    "phone": "0905901555"
-  },
-  {
     "id": "gv_21",
     "teacherName": "Hà Thị Thanh Huyền",
     "position": "Giáo viên",
     "subject": "GDKTPL",
-    "email": "huyen.htt@gmail.com",
+    "email": "hahuyendtnt@gmail.com",
     "phone": "0912123789"
   },
   {
     "id": "gv_22",
-    "teacherName": "Trần Quốc Bảo",
+    "teacherName": "Nguyễn Ngọc Minh",
     "position": "Giáo viên",
     "subject": "Công nghệ",
     "email": "minhanhminh8790@gmail.com",
     "phone": "0905901888"
+  },
+  {
+    "id": "gv_bgh_nam",
+    "teacherName": "Phạm Thế Nam",
+    "position": "Phó Hiệu trưởng",
+    "subject": "Tất cả",
+    "email": "thenamdt@gmail.com",
+    "phone": "0905123999",
+    "role": "SUPER_ADMIN"
   }
 ]

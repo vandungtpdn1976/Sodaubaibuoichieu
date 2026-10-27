@@ -6,12 +6,19 @@ import {
   onAuthStateChanged,
   User,
   signOut,
+  setPersistence,
+  inMemoryPersistence,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
+
+// Enforce inMemoryPersistence (no long-term persistent storage in localStorage)
+setPersistence(auth, inMemoryPersistence).catch((err) => {
+  console.warn('Failed to set inMemoryPersistence:', err);
+});
 
 // Configure Workspace Provider with desired scopes
 export const WORKSPACE_SCOPES = [

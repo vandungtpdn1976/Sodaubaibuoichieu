@@ -1,6 +1,6 @@
 import { LogPeriodEntry, CurrentUser, TeacherAssignment } from '../types';
 
-export const ADMIN_EMAILS: string[] = ['vandungtpdn1976@gmail.com'];
+export const ADMIN_EMAILS: string[] = ['vandungtpdn1976@gmail.com', 'thenamdt@gmail.com'];
 
 /**
  * Checks if an email or user object belongs to the Supreme Admin (SUPER_ADMIN).
@@ -11,6 +11,7 @@ export function checkIsAdmin(email?: string, teachers: TeacherAssignment[] = [])
   
   if (
     lower === 'vandungtpdn1976@gmail.com' ||
+    lower === 'thenamdt@gmail.com' ||
     ADMIN_EMAILS.some((adm) => adm.toLowerCase() === lower)
   ) {
     return true;
@@ -169,4 +170,104 @@ export function canUserDeleteCluster(
     (e) => e.subject.trim().toLowerCase() === assignedSubject.trim().toLowerCase()
   );
 }
+
+
+/**
+ * Checks whether a period entry has a duplicate PPCT lesson number within the same subject.
+ * Note: Duplicate lesson titles (Tên bài học) are explicitly ALLOWED for multi-period lessons.
+ * Excludes comparing against the target entry's own record ID or exact slot.
+ * Returns detailed info on where the duplicate PPCT was found.
+ */
+export function checkDuplicatePPCTLesson(
+  entries: LogPeriodEntry[],
+  targetEntry: Partial<LogPeriodEntry>
+): { isDuplicate: boolean; duplicateInfo?: string; conflictEntry?: LogPeriodEntry; warningMessage?: string } {
+  if (
+    !targetEntry ||
+    !targetEntry.subject ||
+    !targetEntry.subject.trim() ||
+    !targetEntry.ppctLesson ||
+    !targetEntry.ppctLesson.trim()
+  ) {
+    return { isDuplicate: false };
+  }
+
+  const subjLower = targetEntry.subject.trim().toLowerCase();
+  const ppctStr = targetEntry.ppctLesson.trim().toLowerCase();
+  const ppctDigits = ppctStr.replace(/\D/g, '');
+
+  if (!ppctDigits && !ppctStr) return { isDuplicate: false };
+
+  const dayNames: Record<number, string> = {
+    2: 'Thứ Hai',
+    3: 'Thứ Ba',
+    4: 'Thứ Tư',
+    5: 'Thứ Năm',
+    6: 'Thứ Sáu',
+    7: 'Thứ Bảy',
+    8: 'Chủ Nhật',
+  };
+
+  const duplicate = entries.find((e) => {
+    // 1. Skip if exact same record ID
+    if (targetEntry.id && e.id === targetEntry.id) return false;
+
+    // 2. Skip if exact same slot (weekNumber, dayOfWeek, clusterIndex, period)
+    const eWeek = Number(e.weekNumber);
+    const tWeek = Number(targetEntry.weekNumber);
+    const eDay = Number(e.dayOfWeek);
+    const tDay = Number(targetEntry.dayOfWeek);
+    const eCluster = Number(e.clusterIndex || 1);
+    const tCluster = Number(targetEntry.clusterIndex || 1);
+    const ePeriod = Number(e.period);
+    const tPeriod = Number(targetEntry.period);
+
+    if (
+      tWeek &&
+      tDay &&
+      tCluster &&
+      tPeriod &&
+      eWeek === tWeek &&
+      eDay === tDay &&
+      eCluster === tCluster &&
+      ePeriod === tPeriod
+    ) {
+      return false;
+    }
+
+    // 3. Compare subject
+    if (!e.subject || !e.subject.trim()) return false;
+    if (e.subject.trim().toLowerCase() !== subjLower) return false;
+
+    // 4. Compare PPCT number
+    if (!e.ppctLesson || !e.ppctLesson.trim()) return false;
+    const ePpctStr = e.ppctLesson.trim().toLowerCase();
+    const ePpctDigits = ePpctStr.replace(/\D/g, '');
+
+    if (ppctDigits && ePpctDigits) {
+      return ppctDigits === ePpctDigits;
+    }
+    return ppctStr === ePpctStr;
+  });
+
+  if (duplicate) {
+    const dName = dayNames[duplicate.dayOfWeek] || `Thứ ${duplicate.dayOfWeek}`;
+    const datePart = duplicate.dateStr ? `, ngày ${duplicate.dateStr}` : '';
+    const weekPart = duplicate.weekNumber ? `, Tuần ${duplicate.weekNumber}` : '';
+    const teacherPart = duplicate.teacherSignature ? ` (GV ${duplicate.teacherSignature})` : '';
+
+    const duplicateInfo = `${dName}${datePart}${weekPart}${teacherPart}`;
+    const warningMessage = `Các tiết PPCT ${targetEntry.ppctLesson} của môn ${targetEntry.subject} đã được ghi vào ${dName}${datePart}${weekPart}${teacherPart}.\n\nVui lòng kiểm tra và nhập lại số tiết PPCT chính xác trước khi lưu.`;
+
+    return {
+      isDuplicate: true,
+      duplicateInfo,
+      conflictEntry: duplicate,
+      warningMessage,
+    };
+  }
+
+  return { isDuplicate: false };
+}
+
 

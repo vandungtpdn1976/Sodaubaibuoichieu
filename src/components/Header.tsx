@@ -52,8 +52,6 @@ export const Header: React.FC<HeaderProps> = ({
   onChangePasswordClick,
 }) => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
-  const [customEmail, setCustomEmail] = useState('');
-  const [showCustomModal, setShowCustomModal] = useState(false);
 
   const hasScriptUrl = Boolean(config.scriptUrl && config.scriptUrl.trim());
 
@@ -124,49 +122,6 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const handleCustomLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customEmail.trim()) return;
-
-    const emailTrimmed = customEmail.trim();
-    const emailLower = emailTrimmed.toLowerCase();
-    const isAdmin = checkIsAdmin(emailLower);
-
-    if (isAdmin) {
-      const isDung = emailLower === 'vandungtpdn1976@gmail.com';
-      onSelectUser({
-        name: isDung ? 'Thầy Võ Văn Dũng' : 'Quản trị viên (BGH)',
-        email: emailTrimmed,
-        role: 'admin',
-        assignedSubject: isDung ? 'Sử' : undefined,
-        position: isDung ? 'Tổ trưởng' : undefined,
-      });
-    } else {
-      // Check if matching teacher email
-      const matchedTeacher = teachers.find(
-        (t) => t.email.toLowerCase() === emailLower
-      );
-
-      if (matchedTeacher) {
-        if (matchedTeacher.status === 'DISABLED') {
-          alert('Tài khoản Gmail này đã bị Ban Giám hiệu khóa. Vui lòng liên hệ quản trị viên.');
-          return;
-        }
-        onSelectUser({
-          name: matchedTeacher.teacherName,
-          email: matchedTeacher.email,
-          role: 'teacher',
-          assignedSubject: matchedTeacher.subject,
-        });
-      } else {
-        alert(`Tài khoản Gmail (${emailTrimmed}) chưa được Ban Giám hiệu cấp quyền sử dụng Sổ đầu bài. Vui lòng liên hệ quản trị viên.`);
-        return;
-      }
-    }
-    setShowCustomModal(false);
-    setShowUserDropdown(false);
-    setCustomEmail('');
-  };
 
 
   return (
@@ -329,132 +284,35 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
 
                 {showUserDropdown && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="px-4 py-2 border-b border-slate-100">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Đổi tài khoản đăng nhập
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-200 py-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-4 pb-3 border-b border-slate-100">
+                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Tài khoản đang đăng nhập
                       </p>
-                      <p className="text-xs text-slate-600 mt-0.5">
+                      <p className="text-sm font-bold text-slate-900 mt-0.5">
+                        {currentUser.name}
+                      </p>
+                      <p className="text-xs text-blue-800 font-mono mt-0.5">
                         {currentUser.email}
                       </p>
+                      <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-900 text-[10px] font-bold rounded-md">
+                          {currentUser.role === 'admin' ? 'SUPER_ADMIN' : 'TEACHER'}
+                        </span>
+                        {currentUser.assignedSubject && (
+                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 text-[10px] font-bold rounded-md">
+                            Môn {currentUser.assignedSubject}
+                          </span>
+                        )}
+                        {currentUser.position && (
+                          <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-bold rounded-md">
+                            {currentUser.position}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="max-h-72 overflow-y-auto py-1">
-                      {/* BGH Admin */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onSelectUser({
-                            name: 'Thầy Võ Văn Dũng',
-                            email: 'vandungtpdn1976@gmail.com',
-                            role: 'admin',
-                            assignedSubject: 'Sử',
-                            position: 'Tổ trưởng',
-                          });
-                          setShowUserDropdown(false);
-                        }}
-                        className="w-full text-left px-4 py-2 hover:bg-blue-50 text-xs flex items-center justify-between text-slate-800 transition-colors cursor-pointer"
-                      >
-                        <div>
-                          <div className="font-semibold text-blue-900 flex items-center gap-1.5">
-                            <ShieldCheck className="w-3.5 h-3.5 text-blue-700" />
-                            Thầy Võ Văn Dũng
-                            <span className="text-[10px] px-1 py-0.2 rounded font-bold bg-indigo-100 text-indigo-900">
-                              Quản trị viên & GV Sử
-                            </span>
-                          </div>
-                          <div className="text-slate-500 text-[11px]">
-                            Quản trị viên (BGH) kiêm Tổ trưởng Môn Sử · vandungtpdn1976@gmail.com
-                          </div>
-                        </div>
-                        {currentUser.email.toLowerCase() === 'vandungtpdn1976@gmail.com' && (
-                          <Check className="w-4 h-4 text-blue-700" />
-                        )}
-                      </button>
-
-                      <div className="my-1 border-t border-slate-100" />
-                      <div className="px-4 py-1 text-[11px] font-semibold text-slate-400 uppercase">
-                        Giáo viên ôn thi HSG ({teachers.length} GV)
-                      </div>
-
-                      {teachers.length === 0 ? (
-                        <div className="px-4 py-3 text-center text-xs text-slate-500 bg-slate-50 mx-2 my-1 rounded-xl border border-dashed border-slate-200">
-                          <p className="font-semibold text-slate-700">Chưa có giáo viên nào</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">DS cũ đã được xóa sạch để bạn nhập mới</p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowUserDropdown(false);
-                              onOpenAdmin();
-                            }}
-                            className="mt-2 py-1 px-2.5 bg-blue-900 hover:bg-blue-800 text-white font-bold text-[11px] rounded-lg cursor-pointer block w-full transition-colors"
-                          >
-                            + Mở Quản trị để Nhập từ File
-                          </button>
-                        </div>
-                      ) : (
-                        teachers.map((teacher) => {
-                          const isDung = teacher.email.toLowerCase() === 'vandungtpdn1976@gmail.com';
-                          const isCurrent = currentUser.email.toLowerCase() === teacher.email.toLowerCase();
-                          const isMulti = teachers.filter((t) => t.subject === teacher.subject).length > 1;
-
-                        return (
-                          <button
-                            key={teacher.id}
-                            type="button"
-                            onClick={() => {
-                              onSelectUser({
-                                name: isDung ? 'Thầy Võ Văn Dũng' : teacher.teacherName,
-                                email: teacher.email,
-                                role: isDung ? 'admin' : 'teacher',
-                                assignedSubject: teacher.subject,
-                                position: teacher.position || (isDung ? 'Tổ trưởng' : undefined),
-                              });
-                              setShowUserDropdown(false);
-                            }}
-                            className={`w-full text-left px-4 py-1.5 hover:bg-blue-50 text-xs flex items-center justify-between text-slate-700 transition-colors ${
-                              isDung ? 'bg-indigo-50/60 font-semibold' : ''
-                            }`}
-                          >
-                            <div className="truncate pr-2">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className={`font-semibold ${isDung ? 'text-indigo-950 font-bold' : 'text-slate-900'}`}>
-                                  {teacher.teacherName}
-                                </span>
-                                {isDung ? (
-                                  <span className="text-[10px] px-1 py-0.2 rounded font-bold bg-indigo-200 text-indigo-900">
-                                    ⭐ Quản trị & Tổ trưởng Sử
-                                  </span>
-                                ) : teacher.position && teacher.position !== 'Giáo viên' ? (
-                                  <span className={`text-[10px] px-1 py-0.2 rounded font-bold ${
-                                    teacher.position === 'Tổ trưởng' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
-                                  }`}>
-                                    {teacher.position}
-                                  </span>
-                                ) : null}
-                                <span className="text-blue-900 font-medium">
-                                  ({teacher.subject})
-                                </span>
-                                {isMulti && !isDung && (
-                                  <span className="text-[10px] px-1 py-0.2 bg-blue-100 text-blue-800 rounded font-medium">
-                                    Đồng dạy
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[11px] text-slate-500 font-mono truncate">
-                                {teacher.email}
-                              </div>
-                            </div>
-                            {isCurrent && (
-                              <Check className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                            )}
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-
-                    <div className="border-t border-slate-100 pt-1.5 px-3 space-y-1">
+                    <div className="pt-2 px-3 space-y-1">
                       {onChangePasswordClick && (
                         <button
                           type="button"
@@ -462,9 +320,9 @@ export const Header: React.FC<HeaderProps> = ({
                             setShowUserDropdown(false);
                             onChangePasswordClick();
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-amber-900 font-bold hover:bg-amber-50 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                          className="w-full text-left px-3 py-2 text-xs text-slate-800 font-bold hover:bg-amber-50 hover:text-amber-900 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                         >
-                          <KeyRound className="w-3.5 h-3.5 text-amber-700" />
+                          <KeyRound className="w-4 h-4 text-amber-600" />
                           <span>Đổi mật khẩu cá nhân</span>
                         </button>
                       )}
@@ -476,10 +334,10 @@ export const Header: React.FC<HeaderProps> = ({
                             setShowUserDropdown(false);
                             onLogout();
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-red-700 font-bold hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                          className="w-full text-left px-3 py-2 text-xs text-red-700 font-bold hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                         >
-                          <LogOut className="w-3.5 h-3.5 text-red-600" />
-                          <span>Đăng xuất tài khoản</span>
+                          <LogOut className="w-4 h-4 text-red-600" />
+                          <span>Đăng xuất / Chuyển tài khoản khác</span>
                         </button>
                       )}
                     </div>
@@ -490,50 +348,6 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </header>
-
-      {/* Modal Đăng nhập Email tùy chỉnh */}
-      {showCustomModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 border border-slate-200">
-            <h3 className="text-base font-bold text-slate-900 mb-1">
-              Đăng nhập tài khoản Google
-            </h3>
-            <p className="text-xs text-slate-600 mb-4">
-              Nhập email Google của giáo viên để tự động nhận diện môn phụ trách theo phân công chuyên môn.
-            </p>
-            <form onSubmit={handleCustomLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Địa chỉ Email Google
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="ví dụ: gv.toan@gmail.com"
-                  value={customEmail}
-                  onChange={(e) => setCustomEmail(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-800"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCustomModal(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-blue-900 hover:bg-blue-800 rounded-lg transition-colors shadow-xs"
-                >
-                  Xác nhận đăng nhập
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </>
   );
 };

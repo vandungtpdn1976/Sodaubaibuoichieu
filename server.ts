@@ -11,6 +11,7 @@ import {
   createEmptyWeekEntries,
 } from './src/constants/initialData.js';
 import { LogPeriodEntry, SchoolConfig, TeacherAssignment, Student } from './src/types/index.js';
+import { normalizeLogPeriodEntry, normalizeWeekEntries } from './src/utils/dateUtils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,6 +76,14 @@ function initAuthRecords(): AuthRecord[] {
       updatedAt: new Date().toISOString(),
     },
     {
+      email: 'thenamdt@gmail.com',
+      password: 'vandung@2026',
+      isFirstLogin: false,
+      status: 'ACTIVE',
+      role: 'SUPER_ADMIN',
+      updatedAt: new Date().toISOString(),
+    },
+    {
       email: 'vovandungdx@gmail.com',
       password: 'vandung@2026',
       isFirstLogin: false,
@@ -96,6 +105,7 @@ function initAuthRecords(): AuthRecord[] {
     if (
       t.email &&
       t.email.trim().toLowerCase() !== 'vandungtpdn1976@gmail.com' &&
+      t.email.trim().toLowerCase() !== 'thenamdt@gmail.com' &&
       t.email.trim().toLowerCase() !== 'vovandungdx@gmail.com' &&
       t.email.trim().toLowerCase() !== 'voandungdx@gmail.com'
     ) {
@@ -180,6 +190,12 @@ async function startServer() {
       service: 'SoDauBai_Central_API',
     });
   });
+
+  // AI Studio Internal Control Plane Status
+  app.all('/__aistudio_internal_control_plane/*', (_req: Request, res: Response) => {
+    res.json({ status: 'ok', running: true });
+  });
+
 
   // Config
   app.get('/api/config', (_req: Request, res: Response) => {
@@ -515,6 +531,7 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
   if (!localEntries || localEntries.length === 0) {
     localEntries = createEmptyWeekEntries(weekNumber, config.weekOneStartDate);
   }
+  localEntries = normalizeWeekEntries(localEntries, weekNumber, config.weekOneStartDate);
 
   if (!config.scriptUrl || !config.scriptUrl.trim().includes('/exec')) {
     return localEntries;
@@ -536,8 +553,8 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
     if (response.ok) {
       const json = await response.json();
       if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
+        const remoteNorm = normalizeWeekEntries(json.data, weekNumber, config.weekOneStartDate);
         const map = new Map<string, LogPeriodEntry>();
-        const getKey = (e: LogPeriodEntry) => `d${e.dayOfWeek}_c${e.clusterIndex || 1}_p${e.period}`;
         const hasContent = (e: LogPeriodEntry) =>
           Boolean(
             (e.subject && e.subject.trim()) ||
@@ -548,25 +565,19 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
           );
 
         for (const e of localEntries) {
-          map.set(getKey(e), e);
+          map.set(e.id, e);
         }
 
-        for (const e of json.data) {
-          const key = getKey(e);
-          const existing = map.get(key);
+        for (const e of remoteNorm) {
+          const existing = map.get(e.id);
           if (!existing) {
-            map.set(key, e);
+            map.set(e.id, e);
           } else if (hasContent(e)) {
-            map.set(key, { ...existing, ...e });
+            map.set(e.id, { ...existing, ...e });
           }
         }
 
-        const merged = Array.from(map.values()).sort((a, b) => {
-          if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
-          if ((a.clusterIndex || 1) !== (b.clusterIndex || 1)) return (a.clusterIndex || 1) - (b.clusterIndex || 1);
-          return a.period - b.period;
-        });
-
+        const merged = normalizeWeekEntries(Array.from(map.values()), weekNumber, config.weekOneStartDate);
         writeJsonFile(weekFile, merged);
         return merged;
       }
@@ -617,7 +628,7 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
     let authRecords = readJsonFile<AuthRecord[]>(AUTH_FILE, []);
 
     // 1. Check if Supreme Admin
-    if (emailLower === 'vandungtpdn1976@gmail.com') {
+    if (emailLower === 'vandungtpdn1976@gmail.com' || emailLower === 'thenamdt@gmail.com') {
       let adminRecord = authRecords.find((r) => r.email === emailLower);
       if (!adminRecord) {
         initAuthRecords();
@@ -635,15 +646,17 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
         return;
       }
 
+      const adminName = emailLower === 'thenamdt@gmail.com' ? 'Thầy Phạm Thế Nam (Phó HT)' : 'Thầy Võ Văn Dũng';
+
       res.json({
         success: true,
         user: {
-          name: 'Thầy Võ Văn Dũng',
+          name: adminName,
           email: emailTrimmed,
           role: 'SUPER_ADMIN',
           status: 'ACTIVE',
-          assignedSubject: 'Sử',
-          position: 'Tổ trưởng',
+          assignedSubject: 'ALL',
+          position: 'Phó Hiệu trưởng',
           isFirstLogin: Boolean(adminRecord?.isFirstLogin),
         },
       });
@@ -715,6 +728,32 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
     const { email, currentPassword, newPassword } = req.body || {};
     if (!email || !currentPassword || !newPassword) {
       res.status(400).json({ success: false, error: 'Thiếu thông tin đổi mật khẩu.' });
+      return;
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < 12) {
+      res.status(400).json({
+        success: false,
+        error: 'Mật khẩu mới phải có tối thiểu 12 ký tự theo quy định bảo mật.',
+      });
+      return;
+    }
+
+    if (newPassword === 'ptdtnt@2026' || newPassword === 'vandung@2026') {
+      res.status(400).json({
+        success: false,
+        error: 'Mật khẩu mới không được trùng với mật khẩu khởi tạo mặc định (ptdtnt@2026 / vandung@2026).',
+      });
+      return;
+    }
+
+    const hasLetter = /[a-zA-Z]/.test(newPassword);
+    const hasDigitOrSymbol = /[^a-zA-Z]/.test(newPassword);
+    if (!hasLetter || !hasDigitOrSymbol) {
+      res.status(400).json({
+        success: false,
+        error: 'Mật khẩu mới phải kết hợp cả chữ cái và chữ số hoặc ký tự đặc biệt.',
+      });
       return;
     }
 
@@ -793,16 +832,17 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
     const emailLower = emailTrimmed.toLowerCase();
 
     // 1. Supreme Admin
-    if (emailLower === 'vandungtpdn1976@gmail.com') {
+    if (emailLower === 'vandungtpdn1976@gmail.com' || emailLower === 'thenamdt@gmail.com') {
+      const adminName = emailLower === 'thenamdt@gmail.com' ? 'Thầy Phạm Thế Nam (Phó HT)' : 'Thầy Võ Văn Dũng';
       res.json({
         allowed: true,
         user: {
-          name: 'Thầy Võ Văn Dũng',
+          name: adminName,
           email: emailTrimmed,
           role: 'SUPER_ADMIN',
           status: 'ACTIVE',
-          assignedSubject: 'Sử',
-          position: 'Tổ trưởng',
+          assignedSubject: 'ALL',
+          position: 'Phó Hiệu trưởng',
         },
       });
       return;
@@ -885,6 +925,152 @@ async function syncWeekFromSheets(weekNumber: number, config: SchoolConfig): Pro
     });
   });
 
+  // Audit data across Weeks 1 to 35 for SUPER_ADMIN
+  app.get('/api/admin/audit-entries', (_req: Request, res: Response) => {
+    const teachers = readJsonFile<TeacherAssignment[]>(TEACHERS_FILE, []);
+    const knownEmails = new Set(
+      teachers.map((t) => t.email?.trim().toLowerCase()).filter(Boolean)
+    );
+    knownEmails.add('vandungtpdn1976@gmail.com');
+    knownEmails.add('thenamdt@gmail.com');
+    knownEmails.add('vovandungdx@gmail.com');
+    knownEmails.add('voandungdx@gmail.com');
+
+    const knownNames = new Set(
+      teachers.map((t) => t.teacherName?.trim().toLowerCase()).filter(Boolean)
+    );
+    knownNames.add('võ văn dũng');
+    knownNames.add('thầy võ văn dũng');
+    knownNames.add('phạm thế nam');
+
+    const allEntries: (LogPeriodEntry & { origin: string; isTeacherVerified: boolean })[] = [];
+
+    for (let w = 1; w <= 35; w++) {
+      const weekFile = path.resolve(WEEKS_DIR, `week_${w}.json`);
+      if (fs.existsSync(weekFile)) {
+        const entries = readJsonFile<LogPeriodEntry[]>(weekFile, []);
+        for (const e of entries) {
+          const hasContent = Boolean(
+            (e.subject && e.subject.trim()) ||
+            (e.lessonTitle && e.lessonTitle.trim()) ||
+            (e.teacherSignature && e.teacherSignature.trim()) ||
+            (e.ppctLesson && e.ppctLesson.trim())
+          );
+
+          if (hasContent) {
+            const sigLower = (e.teacherSignature || '').trim().toLowerCase();
+            const emailLower = (e.teacherEmail || '').trim().toLowerCase();
+            const isExplicitlyVerified = Boolean((e as any).isTeacherVerified);
+
+            const isKnownTeacher =
+              isExplicitlyVerified ||
+              (emailLower && knownEmails.has(emailLower)) ||
+              (sigLower && knownNames.has(sigLower)) ||
+              Boolean(e.updatedAt && e.teacherSignature);
+
+            const origin = isKnownTeacher ? 'TEACHER_SUBMIT' : 'UNVERIFIED';
+            const isTeacherVerified = isKnownTeacher;
+
+            allEntries.push({
+              ...e,
+              origin,
+              isTeacherVerified,
+            });
+          }
+        }
+      }
+    }
+
+    const verifiedEntries = allEntries.filter((e) => e.isTeacherVerified);
+    const unverifiedEntries = allEntries.filter((e) => !e.isTeacherVerified);
+
+    res.json({
+      success: true,
+      totalEnteredRecords: allEntries.length,
+      verifiedCount: verifiedEntries.length,
+      unverifiedCount: unverifiedEntries.length,
+      unverifiedEntries,
+      verifiedEntries,
+      serverTime: new Date().toISOString(),
+    });
+  });
+
+  // Action endpoint to verify or delete unverified entries (SUPER_ADMIN only)
+  app.post('/api/admin/verify-entry', (req: Request, res: Response) => {
+    const { entryId, weekNumber, action, userEmail } = req.body || {};
+
+    if (!userEmail || (userEmail.trim().toLowerCase() !== 'vandungtpdn1976@gmail.com' && userEmail.trim().toLowerCase() !== 'thenamdt@gmail.com')) {
+      res.status(403).json({ success: false, error: 'Chỉ Ban Giám hiệu (SUPER_ADMIN) mới có quyền kiểm tra và xác minh nguồn gốc dữ liệu.' });
+      return;
+    }
+
+    if (action === 'verify_all_unverified') {
+      let updatedWeeks = 0;
+      for (let w = 1; w <= 35; w++) {
+        const weekFile = path.resolve(WEEKS_DIR, `week_${w}.json`);
+        if (fs.existsSync(weekFile)) {
+          const entries = readJsonFile<LogPeriodEntry[]>(weekFile, []);
+          let changed = false;
+          for (const e of entries) {
+            if (e.subject || e.ppctLesson || e.lessonTitle || e.teacherSignature) {
+              (e as any).isTeacherVerified = true;
+              (e as any).origin = 'TEACHER_SUBMIT';
+              changed = true;
+            }
+          }
+          if (changed) {
+            writeJsonFile(weekFile, entries);
+            updatedWeeks++;
+          }
+        }
+      }
+      res.json({ success: true, message: `Đã xác minh toàn bộ dữ liệu tuần 1 đến 35 thành công!` });
+      return;
+    }
+
+    if (!weekNumber) {
+      res.status(400).json({ success: false, error: 'Thiếu số tuần cần xác minh.' });
+      return;
+    }
+
+    const weekFile = path.resolve(WEEKS_DIR, `week_${weekNumber}.json`);
+    if (!fs.existsSync(weekFile)) {
+      res.status(404).json({ success: false, error: 'Không tìm thấy tệp tuần tương ứng.' });
+      return;
+    }
+
+    const entries = readJsonFile<LogPeriodEntry[]>(weekFile, []);
+    const idx = entries.findIndex((e) => e.id === entryId);
+
+    if (idx < 0) {
+      res.status(404).json({ success: false, error: 'Không tìm thấy bản ghi.' });
+      return;
+    }
+
+    if (action === 'verify') {
+      (entries[idx] as any).isTeacherVerified = true;
+      (entries[idx] as any).origin = 'TEACHER_SUBMIT';
+      writeJsonFile(weekFile, entries);
+      res.json({ success: true, message: 'Đã xác minh bản ghi thành công!' });
+    } else if (action === 'delete') {
+      entries[idx] = {
+        ...entries[idx],
+        subject: '',
+        ppctLesson: '',
+        absentCount: 0,
+        absentStudents: '',
+        lessonTitle: '',
+        teacherSignature: '',
+        teacherEmail: '',
+        updatedAt: new Date().toLocaleString('vi-VN'),
+      };
+      writeJsonFile(weekFile, entries);
+      res.json({ success: true, message: 'Đã làm trống bản ghi nghi vấn thành công!' });
+    } else {
+      res.status(400).json({ success: false, error: 'Thao tác không hợp lệ.' });
+    }
+  });
+
 // Real-time helper to push a period update directly to Google Apps Script Web App
 async function pushPeriodToSheets(entry: LogPeriodEntry, config: SchoolConfig): Promise<{ synced: boolean; error?: string }> {
   if (!config.scriptUrl || !config.scriptUrl.trim().includes('/exec')) {
@@ -893,7 +1079,7 @@ async function pushPeriodToSheets(entry: LogPeriodEntry, config: SchoolConfig): 
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 seconds for Apps Script execution
 
     const response = await fetch(config.scriptUrl.trim(), {
       method: 'POST',
@@ -915,7 +1101,11 @@ async function pushPeriodToSheets(entry: LogPeriodEntry, config: SchoolConfig): 
       return { synced: false, error: `Mã HTTP ${response.status}` };
     }
   } catch (err: any) {
-    console.warn('Real-time pushPeriodToSheets warning:', err);
+    if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+      console.warn('pushPeriodToSheets: Google Apps Script connection timeout (will retry in background).');
+    } else {
+      console.warn('Real-time pushPeriodToSheets warning:', err.message || String(err));
+    }
     return { synced: false, error: err.message || String(err) };
   }
 }
@@ -928,7 +1118,7 @@ async function pushWeekToSheets(weekNumber: number, entries: LogPeriodEntry[], c
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 35000); // 35 seconds for full week batch save
 
     const response = await fetch(config.scriptUrl.trim(), {
       method: 'POST',
@@ -948,7 +1138,11 @@ async function pushWeekToSheets(weekNumber: number, entries: LogPeriodEntry[], c
       return { synced: false, error: `Mã HTTP ${response.status}` };
     }
   } catch (err: any) {
-    console.warn('Real-time pushWeekToSheets warning:', err);
+    if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+      console.warn(`pushWeekToSheets: Google Apps Script connection timeout for week ${weekNumber} (will retry in background).`);
+    } else {
+      console.warn('Real-time pushWeekToSheets warning:', err.message || String(err));
+    }
     return { synced: false, error: err.message || String(err) };
   }
 }
@@ -961,7 +1155,7 @@ async function pushDeleteClusterToSheets(weekNumber: number, dayOfWeek: number, 
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 seconds for cluster delete
 
     await fetch(config.scriptUrl.trim(), {
       method: 'POST',
@@ -976,8 +1170,10 @@ async function pushDeleteClusterToSheets(weekNumber: number, dayOfWeek: number, 
     });
     clearTimeout(timeoutId);
     return { synced: true };
-  } catch (err) {
-    console.warn('Real-time pushDeleteClusterToSheets warning:', err);
+  } catch (err: any) {
+    if (err.name !== 'AbortError' && !err.message?.includes('aborted')) {
+      console.warn('Real-time pushDeleteClusterToSheets warning:', err.message || String(err));
+    }
     return { synced: false };
   }
 }
@@ -999,7 +1195,7 @@ function canEditLessonServer(
   const uLower = userEmail.trim().toLowerCase();
 
   // 1. Check if SUPER_ADMIN
-  if (uLower === 'vandungtpdn1976@gmail.com') {
+  if (uLower === 'vandungtpdn1976@gmail.com' || uLower === 'thenamdt@gmail.com') {
     return { allowed: true, status: 200, isSuperAdmin: true };
   }
 
@@ -1025,6 +1221,15 @@ function canEditLessonServer(
 
   if (matchedAuth?.role === 'SUPER_ADMIN' || matchedTeacher?.role === 'SUPER_ADMIN') {
     return { allowed: true, status: 200, isSuperAdmin: true };
+  }
+
+  // Reject if teacher has not changed first-time password
+  if (matchedAuth?.isFirstLogin) {
+    return {
+      allowed: false,
+      status: 403,
+      error: 'Tài khoản của bạn chưa thực hiện đổi mật khẩu lần đầu. Vui lòng đổi mật khẩu trước khi thực hiện các thao tác trên Sổ đầu bài.',
+    };
   }
 
   // If not super admin, check if week is locked
@@ -1091,7 +1296,85 @@ function canEditLessonServer(
   return { allowed: true, status: 200, teacherSubject: assignedSubject, isSuperAdmin: false };
 }
 
-  // Batch Save Week Entries (With Strict Subject Authorization)
+// Centralized server-side check for PPCT duplicate across all 35 weeks
+function checkPPCTDuplicateServer(
+  targetEntry: Partial<LogPeriodEntry>
+): { isDuplicate: boolean; conflictMsg?: string; conflictEntry?: LogPeriodEntry } {
+  if (
+    !targetEntry ||
+    !targetEntry.subject ||
+    !targetEntry.subject.trim() ||
+    !targetEntry.ppctLesson ||
+    !targetEntry.ppctLesson.trim()
+  ) {
+    return { isDuplicate: false };
+  }
+
+  const subjLower = targetEntry.subject.trim().toLowerCase();
+  const targetPpctRaw = targetEntry.ppctLesson.trim().toLowerCase();
+  const targetPpctDigits = targetPpctRaw.replace(/\D/g, '');
+
+  if (!targetPpctDigits && !targetPpctRaw) return { isDuplicate: false };
+
+  const dayNames: Record<number, string> = {
+    2: 'Thứ Hai',
+    3: 'Thứ Ba',
+    4: 'Thứ Tư',
+    5: 'Thứ Năm',
+    6: 'Thứ Sáu',
+    7: 'Thứ Bảy',
+    8: 'Chủ Nhật',
+  };
+
+  // Scan all 35 weeks on disk
+  for (let w = 1; w <= 35; w++) {
+    const wFile = path.resolve(WEEKS_DIR, `week_${w}.json`);
+    if (fs.existsSync(wFile)) {
+      const wEntries = readJsonFile<LogPeriodEntry[]>(wFile, []);
+      for (const e of wEntries) {
+        // Skip comparing against exact same entry ID or exact same slot
+        if (targetEntry.id && e.id === targetEntry.id) continue;
+        if (
+          Number(e.weekNumber) === Number(targetEntry.weekNumber) &&
+          Number(e.dayOfWeek) === Number(targetEntry.dayOfWeek) &&
+          Number(e.clusterIndex || 1) === Number(targetEntry.clusterIndex || 1) &&
+          Number(e.period) === Number(targetEntry.period)
+        ) {
+          continue;
+        }
+
+        // Compare subject
+        if (!e.subject || e.subject.trim().toLowerCase() !== subjLower) continue;
+
+        // Compare PPCT number
+        if (!e.ppctLesson || !e.ppctLesson.trim()) continue;
+        const ePpctRaw = e.ppctLesson.trim().toLowerCase();
+        const ePpctDigits = ePpctRaw.replace(/\D/g, '');
+
+        let isMatch = false;
+        if (targetPpctDigits && ePpctDigits) {
+          isMatch = targetPpctDigits === ePpctDigits;
+        } else {
+          isMatch = targetPpctRaw === ePpctRaw;
+        }
+
+        if (isMatch) {
+          const dName = dayNames[e.dayOfWeek] || `Thứ ${e.dayOfWeek}`;
+          const datePart = e.dateStr ? `, ngày ${e.dateStr}` : '';
+          const weekPart = `, Tuần ${e.weekNumber}`;
+          const teacherPart = e.teacherSignature ? ` bởi giáo viên ${e.teacherSignature}` : '';
+
+          const conflictMsg = `CẢNH BÁO: DỮ LIỆU TIẾT PPCT BỊ TRÙNG!\n\nCác tiết PPCT ${targetEntry.ppctLesson} của môn ${targetEntry.subject} đã được ghi vào ${dName}${datePart}${weekPart}${teacherPart}.\n\nVui lòng kiểm tra và nhập lại số tiết PPCT chính xác trước khi lưu.`;
+          return { isDuplicate: true, conflictMsg, conflictEntry: e };
+        }
+      }
+    }
+  }
+
+  return { isDuplicate: false };
+}
+
+  // Batch Save Week Entries (With Strict Subject Authorization & PPCT Duplicate Prevention)
   app.post('/api/weeks/:weekNumber', async (req: Request, res: Response) => {
     const weekNumber = parseInt(req.params.weekNumber, 10);
     const { entries, userEmail } = req.body as { entries: LogPeriodEntry[]; userEmail?: string };
@@ -1130,17 +1413,25 @@ function canEditLessonServer(
           res.status(check.status).json({ success: false, error: check.error });
           return;
         }
+
+        // STRICT BACKEND PPCT DUPLICATE CHECK
+        if (e.subject && e.ppctLesson && e.ppctLesson.trim()) {
+          const dupCheck = checkPPCTDuplicateServer({ ...e, weekNumber });
+          if (dupCheck.isDuplicate) {
+            res.status(400).json({
+              success: false,
+              duplicatePPCT: true,
+              error: dupCheck.conflictMsg,
+              conflictEntry: dupCheck.conflictEntry,
+            });
+            return;
+          }
+        }
       }
     }
 
     const config = readJsonFile<SchoolConfig>(CONFIG_FILE, DEFAULT_CONFIG);
-    const normalized = entries.map((e) => ({
-      ...e,
-      weekNumber: Number(e.weekNumber || weekNumber),
-      dayOfWeek: Number(e.dayOfWeek),
-      clusterIndex: Number(e.clusterIndex || 1),
-      period: Number(e.period),
-    }));
+    const normalized = normalizeWeekEntries(entries, weekNumber, config.weekOneStartDate);
 
     writeJsonFile(weekFile, normalized);
 
@@ -1149,10 +1440,10 @@ function canEditLessonServer(
       pushWeekToSheets(weekNumber, normalized, config).catch(() => {});
     }
 
-    res.json({ success: true, weekNumber, count: entries.length });
+    res.json({ success: true, weekNumber, count: normalized.length });
   });
 
-  // Save Single Period Entry (Real-time updates + strict permission check)
+  // Save Single Period Entry (Real-time updates + strict permission check + PPCT duplicate prevention)
   app.post('/api/period', async (req: Request, res: Response) => {
     const { entry, userEmail } = req.body as { entry: LogPeriodEntry; userEmail?: string };
     if (!entry || !entry.weekNumber) {
@@ -1167,7 +1458,22 @@ function canEditLessonServer(
       return;
     }
 
-    const weekNumber = entry.weekNumber;
+    const weekNumber = Number(entry.weekNumber);
+
+    // STRICT BACKEND PPCT DUPLICATE CHECK
+    if (entry.subject && entry.ppctLesson && entry.ppctLesson.trim()) {
+      const dupCheck = checkPPCTDuplicateServer({ ...entry, weekNumber });
+      if (dupCheck.isDuplicate) {
+        res.status(400).json({
+          success: false,
+          duplicatePPCT: true,
+          error: dupCheck.conflictMsg,
+          conflictEntry: dupCheck.conflictEntry,
+        });
+        return;
+      }
+    }
+
     const weekFile = path.resolve(WEEKS_DIR, `week_${weekNumber}.json`);
     const config = readJsonFile<SchoolConfig>(CONFIG_FILE, DEFAULT_CONFIG);
     let entries = readJsonFile<LogPeriodEntry[]>(weekFile, []);
@@ -1175,26 +1481,19 @@ function canEditLessonServer(
     if (!entries || entries.length === 0) {
       entries = createEmptyWeekEntries(weekNumber, config.weekOneStartDate);
     }
+    entries = normalizeWeekEntries(entries, weekNumber, config.weekOneStartDate);
 
-    const entryDay = Number(entry.dayOfWeek);
-    const entryCluster = Number(entry.clusterIndex || 1);
-    const entryPeriod = Number(entry.period);
-
-    const index = entries.findIndex(
-      (e) =>
-        Number(e.dayOfWeek) === entryDay &&
-        Number(e.clusterIndex || 1) === entryCluster &&
-        Number(e.period) === entryPeriod
+    const updatedEntry: LogPeriodEntry = normalizeLogPeriodEntry(
+      {
+        ...entry,
+        weekNumber,
+        updatedAt: new Date().toLocaleString('vi-VN'),
+      },
+      weekNumber,
+      config.weekOneStartDate
     );
 
-    const updatedEntry: LogPeriodEntry = {
-      ...entry,
-      dayOfWeek: entryDay,
-      clusterIndex: entryCluster,
-      period: entryPeriod,
-      weekNumber: Number(weekNumber),
-      updatedAt: new Date().toLocaleString('vi-VN'),
-    };
+    const index = entries.findIndex((e) => e.id === updatedEntry.id);
 
     if (index >= 0) {
       entries[index] = updatedEntry;
@@ -1202,6 +1501,7 @@ function canEditLessonServer(
       entries.push(updatedEntry);
     }
 
+    entries = normalizeWeekEntries(entries, weekNumber, config.weekOneStartDate);
     writeJsonFile(weekFile, entries);
 
     // IMMEDIATELY push single period entry to Google Sheets in real time!
@@ -1281,17 +1581,35 @@ function canEditLessonServer(
   const isProduction = process.env.NODE_ENV === 'production';
 
   if (!isProduction) {
-    // In dev: mount Vite middleware
+    // In dev: mount Vite middleware with appType 'custom' to avoid hijacking control plane endpoints
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: false },
-      appType: 'spa',
+      appType: 'custom',
     });
     app.use(vite.middlewares);
+
+    app.get('*', async (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/__aistudio_internal_control_plane')) {
+        return next();
+      }
+      try {
+        const url = req.originalUrl;
+        let template = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).send(template);
+      } catch (e) {
+        vite.ssrFixStacktrace(e as Error);
+        next(e);
+      }
+    });
   } else {
     // In production: serve dist
     const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/__aistudio_internal_control_plane')) {
+        return next();
+      }
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }

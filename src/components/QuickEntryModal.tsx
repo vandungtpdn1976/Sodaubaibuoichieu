@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Zap, X, Check, Plus, Calendar, Clock, BookOpen, User, Mail } from 'lucide-react';
 import { LogPeriodEntry, SchoolConfig, TeacherAssignment, CurrentUser } from '../types';
-import { getDateForDayOfWeek } from '../utils/dateUtils';
-import { getTeacherAssignedSubject, checkIsAdmin } from '../utils/permissionUtils';
+import { getDateForDayOfWeek, normalizeWeekEntries } from '../utils/dateUtils';
+import { getTeacherAssignedSubject, checkIsAdmin, checkDuplicatePPCTLesson } from '../utils/permissionUtils';
 
 interface QuickEntryModalProps {
   isOpen: boolean;
@@ -59,6 +59,14 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     return t ? t.email : currentUser.email;
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Synchronize selectedDay with initialDay prop whenever modal opens or initialDay changes
+  useEffect(() => {
+    if (isOpen && initialDay >= 2 && initialDay <= 8) {
+      setSelectedDay(initialDay);
+      setTargetClusterOption('new');
+    }
+  }, [initialDay, isOpen]);
 
   const dayNames: Record<number, string> = {
     2: 'Thứ 2',
@@ -122,13 +130,14 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
 
     setIsSubmitting(true);
     try {
+      const dayNum = Number(selectedDay);
       const { dateStr } = getDateForDayOfWeek(
         currentWeek,
         config.weekOneStartDate,
-        selectedDay
+        dayNum
       );
 
-      // Determine target cluster index
+      // Determine target cluster index strictly for selectedDay
       let targetClusterIndex: number;
       if (targetClusterOption === 'new') {
         const maxCluster = existingClustersForDay.reduce((max, c) => Math.max(max, c), 0);
@@ -155,7 +164,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
       for (let p = 1; p <= 5; p++) {
         const existingIdx = updatedEntries.findIndex(
           (e) =>
-            Number(e.dayOfWeek) === Number(selectedDay) &&
+            Number(e.dayOfWeek) === dayNum &&
             (Number(e.clusterIndex) || 1) === Number(targetClusterIndex) &&
             Number(e.period) === Number(p)
         );
@@ -164,7 +173,6 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
         let ppctForThisPeriod = '';
         if (isChosenPeriod) {
           if (hasPPCTNumber) {
-            // Find which index in selectedPeriods this period is
             const orderIndex = selectedPeriods.indexOf(p);
             ppctForThisPeriod = String(basePPCTNum + orderIndex);
           } else {
@@ -173,9 +181,9 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
         }
 
         const entryData: LogPeriodEntry = {
-          id: `w${currentWeek}_d${selectedDay}_c${targetClusterIndex}_p${p}`,
+          id: `w${currentWeek}_d${dayNum}_c${targetClusterIndex}_p${p}`,
           weekNumber: Number(currentWeek),
-          dayOfWeek: Number(selectedDay),
+          dayOfWeek: dayNum,
           dateStr,
           clusterIndex: Number(targetClusterIndex),
           period: Number(p),
@@ -198,7 +206,41 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
         }
       }
 
-      await onApplyBatch(updatedEntries);
+      // Check for duplicate PPCT numbers across week entries for this subject
+      for (const p of selectedPeriods) {
+        let ppctVal = '';
+        if (hasPPCTNumber) {
+          const orderIndex = selectedPeriods.indexOf(p);
+          ppctVal = String(basePPCTNum + orderIndex);
+        } else {
+          ppctVal = startPPCT;
+        }
+
+        if (ppctVal && ppctVal.trim()) {
+          const testEntry = {
+            id: `w${currentWeek}_d${dayNum}_c${targetClusterIndex}_p${p}`,
+            weekNumber: Number(currentWeek),
+            dayOfWeek: dayNum,
+            clusterIndex: Number(targetClusterIndex),
+            period: Number(p),
+            subject: selectedSubject,
+            ppctLesson: ppctVal,
+          };
+          const dupCheck = checkDuplicatePPCTLesson(entries, testEntry);
+          if (dupCheck.isDuplicate) {
+            alert(
+              `CẢNH BÁO: DỮ LIỆU TIẾT PPCT BỊ TRÙNG!\n\n${dupCheck.warningMessage || `Tiết PPCT ${ppctVal} của môn ${selectedSubject} đã tồn tại ở ${dupCheck.duplicateInfo}.`}`
+            );
+            setIsSubmitting(false);
+            return; // STRICTLY BLOCK SUBMISSION AND KEEP TYPED FIELDS
+          }
+        }
+      }
+
+      // Normalize all entries to prevent duplicate or mismatched entries across days
+      const normalized = normalizeWeekEntries(updatedEntries, currentWeek, config.weekOneStartDate);
+
+      await onApplyBatch(normalized);
       onClose();
     } catch (err) {
       console.error(err);
@@ -441,26 +483,75 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
           </div>
 
           {/* Start PPCT */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-              Tiết PPCT bắt đầu:
-            </label>
-            <input
-              type="text"
-              value={startPPCT}
-              onChange={(e) => setStartPPCT(e.target.value)}
-              placeholder="VD: 5"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-900"
-            />
-            {selectedPeriods.length > 0 && !isNaN(Number(startPPCT)) && (
-              <p className="text-[11px] text-emerald-700 font-medium mt-1">
-                Tự động sinh các tiết PPCT:{' '}
-                {selectedPeriods
-                  .map((_, idx) => Number(startPPCT) + idx)
-                  .join(', ')}
-              </p>
-            )}
-          </div>
+          {(() => {
+            const baseNum = parseInt(startPPCT.trim(), 10);
+            const hasNum = !isNaN(baseNum);
+            let firstDupResult: { isDuplicate: boolean; duplicateInfo?: string; warningMessage?: string } | null = null;
+
+            if (selectedPeriods.length > 0 && startPPCT.trim()) {
+              for (const p of selectedPeriods) {
+                let pVal = '';
+                if (hasNum) {
+                  const idx = selectedPeriods.indexOf(p);
+                  pVal = String(baseNum + idx);
+                } else {
+                  pVal = startPPCT.trim();
+                }
+                const test = {
+                  weekNumber: currentWeek,
+                  dayOfWeek: selectedDay,
+                  subject: selectedSubject,
+                  ppctLesson: pVal,
+                };
+                const res = checkDuplicatePPCTLesson(entries, test);
+                if (res.isDuplicate) {
+                  firstDupResult = res;
+                  break;
+                }
+              }
+            }
+
+            const isDup = Boolean(firstDupResult?.isDuplicate);
+
+            return (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Tiết PPCT bắt đầu:
+                </label>
+                <input
+                  type="text"
+                  value={startPPCT}
+                  onChange={(e) => setStartPPCT(e.target.value)}
+                  placeholder="VD: 5"
+                  className={`w-full px-3 py-2 rounded-lg font-mono font-bold transition-all ${
+                    isDup
+                      ? 'border-2 border-red-600 bg-red-50 text-red-950 ring-2 ring-red-400 shadow-2xs'
+                      : 'border border-slate-300 text-slate-900 bg-white'
+                  }`}
+                />
+
+                {isDup && firstDupResult && (
+                  <div className="mt-2 p-3 bg-red-50 border-2 border-red-300 rounded-xl text-xs text-red-900 animate-in fade-in duration-150 shadow-2xs">
+                    <div className="font-bold flex items-center gap-1 text-red-700">
+                      <span>⚠️ CẢNH BÁO: DỮ LIỆU TIẾT PPCT BỊ TRÙNG!</span>
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed">
+                      {firstDupResult.warningMessage || `Các tiết PPCT thuộc môn ${selectedSubject} đã được ghi vào ${firstDupResult.duplicateInfo}.`}
+                    </p>
+                  </div>
+                )}
+
+                {!isDup && selectedPeriods.length > 0 && hasNum && (
+                  <p className="text-[11px] text-emerald-700 font-medium mt-1">
+                    Tự động sinh các tiết PPCT:{' '}
+                    {selectedPeriods
+                      .map((_, idx) => baseNum + idx)
+                      .join(', ')}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Lesson Title */}
           <div>

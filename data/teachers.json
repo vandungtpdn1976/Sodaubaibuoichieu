@@ -100,7 +100,7 @@
     "teacherName": "Trần Thị Thanh Hà",
     "position": "Tổ phó",
     "subject": "Ngữ văn",
-    "email": "ha.ttt@gmail.com",
+    "email": "tranthanhhaquangbinh@gmail.com",
     "phone": "0905123013"
   },
   {
@@ -175,7 +175,7 @@
     "teacherName": "Hà Thị Thanh Huyền",
     "position": "Giáo viên",
     "subject": "GDKTPL",
-    "email": "huyen.htt@gmail.com",
+    "email": "hahuyendtnt@gmail.com",
     "phone": "0912123789"
   },
   {
@@ -185,5 +185,14 @@
     "subject": "Công nghệ",
     "email": "minhanhminh8790@gmail.com",
     "phone": "0905901888"
+  },
+  {
+    "id": "gv_bgh_nam",
+    "teacherName": "Phạm Thế Nam",
+    "position": "Phó Hiệu trưởng",
+    "subject": "Tất cả",
+    "email": "thenamdt@gmail.com",
+    "phone": "0905123999",
+    "role": "SUPER_ADMIN"
   }
 ]

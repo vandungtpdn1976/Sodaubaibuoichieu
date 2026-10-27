@@ -289,10 +289,11 @@ export default function App() {
 
     const res = await ApiService.savePeriodEntry(finalEntry, config, currentUser.email);
     if (!res.success) {
-      showToast(res.error || 'Bạn không có quyền chỉnh sửa môn học này.', 'error');
+      const errMsg = res.error || 'Bạn không có quyền chỉnh sửa môn học này.';
+      showToast(errMsg, 'error');
       // Reload fresh week data from server to revert optimistic update
       loadCurrentWeek(currentWeek);
-      return;
+      throw new Error(errMsg);
     }
 
     setEntries((prev) => {
