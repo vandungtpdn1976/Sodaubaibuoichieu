@@ -28,6 +28,36 @@ const STORAGE_KEY_CURRENT_USER = 'sdb_current_user';
 
 const STORAGE_KEY_AUTH_SESSION = 'sdb_authenticated_session';
 
+async function safeFetchJson<T = any>(
+  url: string,
+  options?: RequestInit
+): Promise<{ ok: boolean; status: number; data?: T; error?: string }> {
+  try {
+    const res = await fetch(url, options);
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json();
+      return { ok: res.ok, status: res.status, data };
+    } else {
+      const text = await res.text();
+      console.warn(`Non-JSON response from ${url} (${res.status}):`, text.slice(0, 100));
+      let errorMsg = `Máy chủ trả về phản hồi không hợp lệ (Mã HTTP ${res.status}).`;
+      if (res.status === 404) {
+        errorMsg = 'API không tồn tại trên Vercel (HTTP 404). Vui lòng kiểm tra lại cấu hình Vercel Serverless Function.';
+      } else if (res.status === 500) {
+        errorMsg = 'Máy chủ Vercel gặp lỗi xử lý internal (HTTP 500).';
+      }
+      return { ok: false, status: res.status, error: errorMsg };
+    }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      error: 'Không thể kết nối máy chủ: ' + (err?.message || String(err)),
+    };
+  }
+}
+
 export class ApiService {
   static checkIsAuthenticated(): boolean {
     // Per security requirements: Always require login on page reload / initial load / new tab
@@ -50,22 +80,18 @@ export class ApiService {
     email: string,
     password: string
   ): Promise<{ success: boolean; user?: CurrentUser & { isFirstLogin?: boolean }; error?: string }> {
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const json = await res.json();
-      if (res.ok && json.success && json.user) {
-        ApiService.setAuthenticatedSession(true);
-        ApiService.saveCurrentUser(json.user);
-        return { success: true, user: json.user };
-      }
-      return { success: false, error: json.error || 'Đăng nhập không thành công.' };
-    } catch (e: any) {
-      return { success: false, error: 'Không thể kết nối máy chủ xác thực: ' + (e.message || String(e)) };
+    const { ok, data, error } = await safeFetchJson<any>('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (ok && data?.success && data?.user) {
+      ApiService.setAuthenticatedSession(true);
+      ApiService.saveCurrentUser(data.user);
+      return { success: true, user: data.user };
     }
+    return { success: false, error: data?.error || error || 'Đăng nhập không thành công.' };
   }
 
   static async changePassword(
@@ -73,40 +99,33 @@ export class ApiService {
     currentPassword: string,
     newPassword: string
   ): Promise<{ success: boolean; message?: string; error?: string }> {
-    try {
-      const res = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, currentPassword, newPassword }),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        return { success: true, message: json.message };
-      }
-      return { success: false, error: json.error || 'Đổi mật khẩu thất bại.' };
-    } catch (e: any) {
-      return { success: false, error: 'Không thể kết nối máy chủ: ' + (e.message || String(e)) };
+    const { ok, data, error } = await safeFetchJson<any>('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, currentPassword, newPassword }),
+    });
+
+    if (ok && data?.success) {
+      return { success: true, message: data.message };
     }
+    return { success: false, error: data?.error || error || 'Đổi mật khẩu thất bại.' };
   }
 
   static async requestPasswordReset(
     email: string
   ): Promise<{ success: boolean; message?: string; error?: string }> {
-    try {
-      const res = await fetch('/api/auth/reset-password-request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        return { success: true, message: json.message };
-      }
-      return { success: false, error: json.error || 'Không thể khôi phục mật khẩu.' };
-    } catch (e: any) {
-      return { success: false, error: 'Lỗi hệ thống: ' + (e.message || String(e)) };
+    const { ok, data, error } = await safeFetchJson<any>('/api/auth/reset-password-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+
+    if (ok && data?.success) {
+      return { success: true, message: data.message };
     }
+    return { success: false, error: data?.error || error || 'Không thể khôi phục mật khẩu.' };
   }
+
 
   static logout(): void {
     ApiService.setAuthenticatedSession(false);

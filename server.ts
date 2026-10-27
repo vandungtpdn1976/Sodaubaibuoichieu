@@ -17,16 +17,48 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = 3000;
-const DATA_DIR = path.resolve(__dirname, 'data');
+const isVercel = Boolean(process.env.VERCEL);
+const DATA_DIR = isVercel ? path.resolve('/tmp', 'sdb_data') : path.resolve(__dirname, 'data');
 const WEEKS_DIR = path.resolve(DATA_DIR, 'weeks');
 
 // Ensure data directories exist
 if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
 }
 if (!fs.existsSync(WEEKS_DIR)) {
-  fs.mkdirSync(WEEKS_DIR, { recursive: true });
+  try { fs.mkdirSync(WEEKS_DIR, { recursive: true }); } catch (e) {}
 }
+
+// Seed Vercel serverless environment from bundled data folder if needed
+if (isVercel) {
+  try {
+    const bundledDir = path.resolve(__dirname, 'data');
+    if (fs.existsSync(bundledDir)) {
+      const filesToCopy = ['config.json', 'teachers.json', 'students.json', 'users_auth.json'];
+      for (const file of filesToCopy) {
+        const srcFile = path.resolve(bundledDir, file);
+        const destFile = path.resolve(DATA_DIR, file);
+        if (fs.existsSync(srcFile) && !fs.existsSync(destFile)) {
+          fs.copyFileSync(srcFile, destFile);
+        }
+      }
+      const bundledWeeksDir = path.resolve(bundledDir, 'weeks');
+      if (fs.existsSync(bundledWeeksDir)) {
+        const weekFiles = fs.readdirSync(bundledWeeksDir);
+        for (const wf of weekFiles) {
+          const srcW = path.resolve(bundledWeeksDir, wf);
+          const destW = path.resolve(WEEKS_DIR, wf);
+          if (!fs.existsSync(destW)) {
+            fs.copyFileSync(srcW, destW);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Vercel data seed warning:', e);
+  }
+}
+
 
 // Helpers for reading and writing JSON files safely
 function readJsonFile<T>(filePath: string, fallback: T): T {
@@ -164,21 +196,27 @@ if (!fs.existsSync(week5File)) {
   writeJsonFile(week5File, createEmptyWeekEntries(5, DEFAULT_CONFIG.weekOneStartDate));
 }
 
-async function startServer() {
-  const app = express();
-  app.use(express.json({ limit: '15mb' }));
+export const app = express();
+app.use(express.json({ limit: '15mb' }));
 
-  // CORS headers
-  app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') {
-      res.sendStatus(200);
-      return;
-    }
-    next();
-  });
+// CORS headers
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  next();
+});
+
+async function startServer() {
+  if (process.env.VERCEL) {
+    // On Vercel, requests are served by the serverless handler
+    return;
+  }
+
 
   // ===================== API ROUTES =====================
 
@@ -1619,7 +1657,10 @@ function checkPPCTDuplicateServer(
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+if (!process.env.VERCEL) {
+  startServer().catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}
+

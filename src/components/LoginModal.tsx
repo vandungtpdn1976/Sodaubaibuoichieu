@@ -89,7 +89,20 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         body: JSON.stringify({ email: googleEmail, uid: res.user.uid }),
       });
 
-      const verifyData = await verifyRes.json();
+      const contentType = verifyRes.headers.get('content-type') || '';
+      let verifyData: any = {};
+
+      if (contentType.includes('application/json')) {
+        verifyData = await verifyRes.json();
+      } else {
+        const textErr = await verifyRes.text();
+        console.warn('Non-JSON verify-user response:', textErr.slice(0, 100));
+        setErrorMessage(
+          `Không thể kết nối API xác thực trên Vercel (Mã HTTP ${verifyRes.status}). Vui lòng kiểm tra lại triển khai Vercel backend /api.`
+        );
+        return;
+      }
+
 
       if (verifyRes.ok && verifyData.allowed && verifyData.user) {
         const loggedUser: CurrentUser = {
