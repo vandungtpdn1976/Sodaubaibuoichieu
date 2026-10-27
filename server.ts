@@ -211,28 +211,25 @@ app.use((req, res, next) => {
   next();
 });
 
-async function startServer() {
-  if (process.env.VERCEL) {
-    // On Vercel, requests are served by the serverless handler
-    return;
-  }
+// ===================== API ROUTES =====================
 
+// Health / Status
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok' });
+});
 
-  // ===================== API ROUTES =====================
-
-  // Health / Status
-  app.get('/api/status', (_req: Request, res: Response) => {
-    res.json({
-      status: 'ok',
-      serverTime: new Date().toISOString(),
-      service: 'SoDauBai_Central_API',
-    });
+app.get('/api/status', (_req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    serverTime: new Date().toISOString(),
+    service: 'SoDauBai_Central_API',
   });
+});
 
-  // AI Studio Internal Control Plane Status
-  app.all('/__aistudio_internal_control_plane/*', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', running: true });
-  });
+// AI Studio Internal Control Plane Status
+app.all('/__aistudio_internal_control_plane/*', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', running: true });
+});
 
 
   // Config
@@ -1615,11 +1612,17 @@ function checkPPCTDuplicateServer(
   });
 
 
-  // ===================== FRONTEND SERVING =====================
+// ===================== FRONTEND SERVING & DEV SERVER =====================
+async function startServer() {
+  if (process.env.VERCEL) {
+    return;
+  }
+
   const isProduction = process.env.NODE_ENV === 'production';
 
   if (!isProduction) {
     // In dev: mount Vite middleware with appType 'custom' to avoid hijacking control plane endpoints
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: false },
       appType: 'custom',
