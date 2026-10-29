@@ -113,6 +113,28 @@ export function canUserEditEntry(
     return false;
   }
 
+  // Verify record ownership if signed or created by another teacher
+  if (entry.teacherEmail && entry.teacherEmail.trim()) {
+    const entryEmailLower = entry.teacherEmail.trim().toLowerCase();
+    if (entryEmailLower !== userEmailLower) {
+      return false; // Cannot edit/delete another teacher's signed record
+    }
+  } else if (entry.teacherSignature && entry.teacherSignature.trim()) {
+    const sigLower = entry.teacherSignature.trim().toLowerCase();
+    const userMatchedTeacher = teachers.find(
+      (t) => t.email && t.email.trim().toLowerCase() === userEmailLower
+    );
+    const myNameLower = (userMatchedTeacher?.teacherName || user.name || '').trim().toLowerCase();
+    if (
+      myNameLower &&
+      sigLower !== myNameLower &&
+      !sigLower.includes(myNameLower) &&
+      !myNameLower.includes(sigLower)
+    ) {
+      return false; // Cannot edit/delete another teacher's signed record
+    }
+  }
+
   // If entry has an assigned subject, compare directly with teacher's assigned subject
   if (entry.subject && entry.subject.trim()) {
     return entry.subject.trim().toLowerCase() === teacherSubject.trim().toLowerCase();

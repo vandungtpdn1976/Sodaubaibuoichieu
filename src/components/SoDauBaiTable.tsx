@@ -354,10 +354,13 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
             </button>
           )}
 
-          {/* Chip riêng của Thầy Võ Văn Dũng (Dual-role) */}
+          {/* Chip riêng của tài khoản đang đăng nhập */}
           {(() => {
-            const myEntry = teacherStats.get('võ văn dũng') || teacherStats.get('thầy võ văn dũng');
-            const isSelected = selectedTeacherFilter === 'my_periods' || selectedTeacherFilter === 'Võ Văn Dũng';
+            const userSubj = getTeacherAssignedSubject(currentUser, teachers) || currentUser.assignedSubject || '';
+            const myNameLower = (currentUser.name || '').trim().toLowerCase();
+            const myStat = myNameLower ? teacherStats.get(myNameLower) : null;
+            const isSelected = selectedTeacherFilter === 'my_periods' || (currentUser.name && selectedTeacherFilter === currentUser.name);
+
             return onSelectTeacherFilter ? (
               <button
                 type="button"
@@ -365,17 +368,17 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 border ${
                   isSelected
                     ? 'bg-amber-500 text-white border-amber-600 shadow-xs ring-2 ring-amber-300'
-                    : myEntry
+                    : myStat
                     ? 'bg-indigo-50 text-indigo-900 border-indigo-300 hover:bg-indigo-100'
                     : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
                 }`}
-                title="Tài khoản của bạn: Thầy Võ Văn Dũng (Quản trị viên & GV Môn Sử)"
+                title={`Tài khoản của bạn: ${currentUser.name} (${userSubj ? `Môn ${userSubj}` : 'Giáo viên'})`}
               >
-                <span>⭐ Thầy Võ Văn Dũng (Sử):</span>
+                <span>⭐ Tiết của tôi ({currentUser.name}{userSubj ? ` - ${userSubj}` : ''}):</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                   isSelected ? 'bg-white/20 text-white' : 'bg-indigo-200 text-indigo-950'
                 }`}>
-                  {myEntry ? `${myEntry.count} tiết đã ký` : 'Chưa vào sổ'}
+                  {myStat ? `${myStat.count} tiết đã ký` : 'Chưa vào sổ'}
                 </span>
               </button>
             ) : null;
@@ -603,16 +606,24 @@ export const SoDauBaiTable: React.FC<SoDauBaiTableProps> = ({
                     const editable = canEditEntry(entry);
                     const isSaving = savingId === entry.id;
 
-                    const isMyEntry =
-                      Boolean(
-                        entry.teacherSignature?.toLowerCase().includes('dũng') ||
-                        entry.teacherEmail?.toLowerCase() === 'vandungtpdn1976@gmail.com'
-                      );
+                    const userEmail = (currentUser.email || '').toLowerCase();
+                    const userName = (currentUser.name || '').toLowerCase();
+                    const userSubj = (getTeacherAssignedSubject(currentUser, teachers) || currentUser.assignedSubject || '').toLowerCase();
+
+                    const sig = (entry.teacherSignature || '').toLowerCase();
+                    const email = (entry.teacherEmail || '').toLowerCase();
+                    const subj = (entry.subject || '').toLowerCase();
+
+                    const isMyEntry = Boolean(
+                      (userEmail && email === userEmail) ||
+                      (userName && sig && (sig.includes(userName) || userName.includes(sig))) ||
+                      (userSubj && userSubj !== 'all' && subj && subj === userSubj)
+                    );
 
                     const matchesTeacherFilter = !selectedTeacherFilter
                       ? true
                       : selectedTeacherFilter === 'my_periods'
-                      ? isMyEntry || entry.subject === 'Sử'
+                      ? isMyEntry
                       : (entry.teacherSignature || '').toLowerCase().trim() === selectedTeacherFilter.toLowerCase().trim() ||
                         (entry.teacherEmail || '').toLowerCase().trim() === selectedTeacherFilter.toLowerCase().trim();
 

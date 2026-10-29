@@ -307,9 +307,9 @@ export const WeekToolbar: React.FC<WeekToolbarProps> = ({
                   }`}
                 >
                   <option value="">Tất cả giáo viên (Toàn trường)</option>
-                  {currentUser.email.toLowerCase() === 'vandungtpdn1976@gmail.com' && (
-                    <option value="my_periods">⭐ Tiết của tôi (Thầy Võ Văn Dũng - Môn Sử)</option>
-                  )}
+                  <option value="my_periods">
+                    ⭐ Tiết của tôi ({currentUser.name}{currentUser.assignedSubject ? ` - Môn ${currentUser.assignedSubject}` : ''})
+                  </option>
                   {teachers.map((t) => (
                     <option key={t.id} value={t.teacherName}>
                       {t.teacherName} ({t.subject})

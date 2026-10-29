@@ -129,12 +129,10 @@ export default function App() {
       setCurrentUser(updated);
       ApiService.saveCurrentUser(updated);
 
-      // Reset filters when switching to SUPER_ADMIN / Admin to ensure full visibility
-      if (isAdminUser) {
-        setSelectedTeacherFilter('');
-        setSelectedSubjectFilter('');
-        setSearchQuery('');
-      }
+      // ALWAYS reset filters so EVERY teacher or admin landing on the app sees ALL subjects & ALL teachers by default
+      setSelectedTeacherFilter('');
+      setSelectedSubjectFilter('');
+      setSearchQuery('');
 
       showToast(
         `Đã kích hoạt tài khoản: ${updated.name} (${
@@ -538,9 +536,14 @@ export default function App() {
         if (selectedTeacherFilter === 'my_periods') {
           const sig = (e.teacherSignature || '').toLowerCase();
           const email = (e.teacherEmail || '').toLowerCase();
-          const isMySig = sig.includes('dũng') || sig.includes('võ văn dũng');
-          const isMyEmail = email === 'vandungtpdn1976@gmail.com';
-          const isMySubj = e.subject === 'Sử';
+          const userEmail = (currentUser.email || '').toLowerCase();
+          const userName = (currentUser.name || '').toLowerCase();
+          const userSubj = (currentUser.assignedSubject || '').toLowerCase();
+
+          const isMySig = Boolean(userName && sig && (sig.includes(userName) || userName.includes(sig)));
+          const isMyEmail = Boolean(userEmail && email === userEmail);
+          const isMySubj = Boolean(userSubj && userSubj !== 'all' && e.subject && e.subject.toLowerCase() === userSubj);
+
           if (!isMySig && !isMyEmail && !isMySubj) {
             return false;
           }
